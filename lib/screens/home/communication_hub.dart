@@ -164,15 +164,11 @@ class _CommunicationHubState extends State<CommunicationHub> {
                           color: AppTheme.logoSage.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text("EDITABLE TRANSCRIPTION", 
+                        child: const Text("REAL-TIME TRANSCRIPTION", 
                           style: TextStyle(color: AppTheme.logoSage, fontWeight: FontWeight.w900, fontSize: 9, letterSpacing: 1.5)),
                       ),
                       const Spacer(),
-                      IconButton(
-                        onPressed: () => _transcriptionController.clear(), 
-                        icon: const Icon(LucideIcons.eraser, size: 16, color: AppTheme.logoRose),
-                        tooltip: "Clear Text",
-                      ),
+                      // Removed clear icon as it's no longer editable
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -181,6 +177,8 @@ class _CommunicationHubState extends State<CommunicationHub> {
                       controller: _transcriptionController,
                       maxLines: null,
                       expands: true,
+                      readOnly: true, // Make it non-editable
+                      enabled: true,  // Keep it enabled so it remains visible but non-interactive
                       textAlignVertical: TextAlignVertical.top,
                       onChanged: (value) => AppState.translatedText.value = value,
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
