@@ -48,6 +48,7 @@ Parrot is a cutting-edge Flutter application designed to bridge the communicatio
 
 - `lib/core`: Theme and global configurations.
 - `lib/screens/home`: Real-time translation hub and camera interface.
+- `lib/screens/voice_studio`: Voice library management and cloned voices dashboard.
 - `lib/screens/onboarding`: Voice creation wizard and onboarding flows.
 - `lib/screens/profile`: User profile and settings management.
 - `lib/widgets`: Reusable UI components like Emotion Indicators and Waveform Visualizers.

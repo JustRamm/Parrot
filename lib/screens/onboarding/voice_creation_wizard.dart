@@ -44,7 +44,6 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Voice Studio"),
-        automaticallyImplyLeading: false,
         actions: [
           if (_currentStep > 0)
             IconButton(

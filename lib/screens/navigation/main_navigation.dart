@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../home/communication_hub.dart';
-import '../onboarding/voice_creation_wizard.dart';
+import '../voice_studio/voice_library.dart';
 import '../profile/profile_screen.dart';
 import '../../core/theme.dart';
 
@@ -17,7 +17,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
 
   final List<Widget> _screens = [
     const CommunicationHub(),
-    const VoiceCreationWizard(),
+    const VoiceLibraryScreen(),
     const ProfileScreen(),
   ];
 
