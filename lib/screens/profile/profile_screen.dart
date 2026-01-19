@@ -86,7 +86,7 @@ class ProfileScreen extends StatelessWidget {
             
             // Menu Items
             _buildMenuItem(context, LucideIcons.bookOpen, "Gesture Library", onTap: () => context.push('/learning')),
-            _buildMenuItem(context, LucideIcons.userCheck, "Account Details"),
+            _buildMenuItem(context, LucideIcons.userCheck, "Account Details", onTap: () => context.push('/account-settings')),
             _buildMenuItem(context, LucideIcons.history, "Translation History", onTap: () => context.push('/history')),
             _buildMenuItem(context, LucideIcons.creditCard, "Subscription"),
             _buildMenuItem(context, LucideIcons.helpCircle, "Help & Support"),

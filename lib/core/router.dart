@@ -8,6 +8,7 @@ import '../screens/voice_studio/voice_library.dart';
 import '../screens/onboarding/voice_creation_wizard.dart';
 import '../screens/learning/gesture_library.dart';
 import '../screens/history/history_screen.dart';
+import '../screens/settings/account_settings.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -43,6 +44,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/history',
       builder: (context, state) => const HistoryScreen(),
+    ),
+    GoRoute(
+      path: '/account-settings',
+      builder: (context, state) => const AccountSettingsScreen(),
     ),
   ],
 );
