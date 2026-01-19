@@ -227,6 +227,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 80), // Clearance for floating navbar
                 ],
               ),
             ),

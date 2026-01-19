@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
-import '../onboarding/voice_creation_wizard.dart';
 
 class VoiceLibraryScreen extends StatefulWidget {
   const VoiceLibraryScreen({super.key});
@@ -60,7 +59,7 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
             ),
             const SizedBox(height: 32),
             _buildCreateNewCard(context),
-            const SizedBox(height: 40),
+            const SizedBox(height: 120),
           ],
         ),
       ),
@@ -201,7 +200,7 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(color: AppTheme.logoSage.withOpacity(0.1), shape: BoxShape.circle),
-              child: const Icon(LucideIcons.microphone, color: AppTheme.logoSage),
+              child: const Icon(LucideIcons.mic, color: AppTheme.logoSage),
             ),
             const SizedBox(width: 16),
             const Expanded(
