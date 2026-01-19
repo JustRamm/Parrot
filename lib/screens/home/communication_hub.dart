@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:go_router/go_router.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../../providers/app_state.dart';
 import '../../widgets/emotion_indicator.dart';
 import '../../core/theme.dart';
@@ -15,6 +16,9 @@ class CommunicationHub extends StatefulWidget {
 class _CommunicationHubState extends State<CommunicationHub> {
   late TextEditingController _transcriptionController;
   bool _isCameraActive = false;
+  IO.Socket? socket;
+  // Use unique key to force refresh of image stream when toggled
+  Key _streamKey = UniqueKey();
 
   @override
   void initState() {
@@ -27,12 +31,58 @@ class _CommunicationHubState extends State<CommunicationHub> {
         _transcriptionController.text = AppState.translatedText.value;
       }
     });
+
+    _initSocket();
+    
+    // Automatically start camera for testing
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _toggleCamera();
+    });
+  }
+
+  void _initSocket() {
+    // 10.0.2.2 is needed for Android Emulator to reach localhost. 
+    // For Desktop/Web 'http://127.0.0.1:5000' works better than localhost on Windows.
+    socket = IO.io('http://127.0.0.1:5000', <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+    });
+
+    socket?.onConnect((_) {
+      print('Connected to Sign Language Backend');
+    });
+
+    socket?.on('text_update', (data) {
+      if (data != null && data['text'] != null) {
+        String newText = data['text'];
+        // Simple smoothing: only update if different
+        if (AppState.translatedText.value != newText) {
+             AppState.translatedText.value = newText;
+        }
+      }
+    });
+    
+    socket?.onDisconnect((_) => print('Disconnected'));
   }
 
   @override
   void dispose() {
     _transcriptionController.dispose();
+    socket?.dispose();
     super.dispose();
+  }
+
+  void _toggleCamera() {
+    setState(() {
+      _isCameraActive = !_isCameraActive;
+      if (_isCameraActive) {
+        socket?.connect();
+        // Refresh stream key to force ID reset
+        _streamKey = UniqueKey();
+      } else {
+        socket?.disconnect();
+      }
+    });
   }
 
   @override
@@ -85,44 +135,48 @@ class _CommunicationHubState extends State<CommunicationHub> {
             child: Stack(
               children: [
                 GestureDetector(
-                  onTap: () => setState(() => _isCameraActive = !_isCameraActive),
+                  onTap: _toggleCamera,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 500),
                     curve: Curves.easeInOut,
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: _isCameraActive 
-                          ? [Colors.black, AppTheme.primaryDark.withOpacity(0.8)] 
-                          : [Colors.black54, Colors.black],
-                      ),
+                      color: Colors.black,
                     ),
                     child: Center(
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          Icon(
-                            _isCameraActive ? LucideIcons.camera : LucideIcons.cameraOff, 
-                            size: 64, 
-                            color: _isCameraActive ? AppTheme.logoSage.withOpacity(0.4) : Colors.white.withOpacity(0.05)
-                          ),
                           if (_isCameraActive)
-                            TweenAnimationBuilder<double>(
-                              tween: Tween(begin: 0.0, end: 1.0),
-                              duration: const Duration(seconds: 2),
-                              builder: (context, value, child) {
-                                return Container(
-                                  width: 250,
-                                  height: 250,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: AppTheme.logoSage.withOpacity(0.1 * (1 - value)), width: 2),
-                                    borderRadius: BorderRadius.circular(12),
+                            // MJPEG Stream from Python Backend
+                            Image.network(
+                              'http://127.0.0.1:5000/video_feed',
+                              key: _streamKey,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              gaplessPlayback: true,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Center(child: CircularProgressIndicator(color: AppTheme.logoSage.withOpacity(0.5)));
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Center(
+                                  child: Text(
+                                    "Server Offline\nRun: python server.py",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                                   ),
                                 );
                               },
+                            )
+                          else
+                            Icon(
+                              LucideIcons.cameraOff, 
+                              size: 64, 
+                              color: Colors.white.withOpacity(0.1)
                             ),
+                            
                           if (!_isCameraActive)
                             Transform.translate(
                               offset: const Offset(0, 50),
@@ -173,7 +227,6 @@ class _CommunicationHubState extends State<CommunicationHub> {
                           style: TextStyle(color: AppTheme.logoSage, fontWeight: FontWeight.w900, fontSize: 9, letterSpacing: 1.5)),
                       ),
                       const Spacer(),
-                      // Removed clear icon as it's no longer editable
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -182,8 +235,8 @@ class _CommunicationHubState extends State<CommunicationHub> {
                       controller: _transcriptionController,
                       maxLines: null,
                       expands: true,
-                      readOnly: true, // Make it non-editable
-                      enabled: true,  // Keep it enabled so it remains visible but non-interactive
+                      readOnly: true,
+                      enabled: true,
                       textAlignVertical: TextAlignVertical.top,
                       onChanged: (value) => AppState.translatedText.value = value,
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
