@@ -1,6 +1,6 @@
 {
-    "name": "sign_to_speech_app",
-    "short_name": "sign_to_speech_app",
+    "name": "Parrot",
+    "short_name": "Parrot",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
