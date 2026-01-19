@@ -24,13 +24,17 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surfaceWhite,
       appBar: AppBar(
-        title: const Text("Voice Studio", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, letterSpacing: 0.5)),
+        title: const Text("Voice Studio", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20, letterSpacing: -0.5)),
+        centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(LucideIcons.plusCircle, color: AppTheme.logoSage),
+            icon: const Icon(LucideIcons.plus, color: AppTheme.primaryDark),
+            style: IconButton.styleFrom(
+              backgroundColor: AppTheme.backgroundClean,
+            ),
             onPressed: () => _navigateToWizard(context),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
         ],
       ),
       body: SingleChildScrollView(
@@ -38,19 +42,28 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             _buildActiveVoiceCard(),
             const SizedBox(height: 32),
-            const Text(
-              "Your Cloned Voices",
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryDark, letterSpacing: 1.2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Voice Library",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.primaryDark),
+                ),
+                Text(
+                  "${_voices.length} voices",
+                  style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _voices.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              separatorBuilder: (context, index) => const SizedBox(height: 16),
               itemBuilder: (context, index) {
                 final voice = _voices[index];
                 final isActive = voice['id'] == _activeVoiceId;
@@ -58,8 +71,8 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
               },
             ),
             const SizedBox(height: 32),
-            _buildCreateNewCard(context),
-            const SizedBox(height: 120),
+            _buildCreateNewButton(context),
+            const SizedBox(height: 120), // Clearance for navbar
           ],
         ),
       ),
@@ -72,18 +85,14 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.logoSage, AppTheme.logoSage.withOpacity(0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
+        color: AppTheme.primaryDark,
+        borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.logoSage.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          )
+            color: AppTheme.primaryDark.withOpacity(0.3),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
+          ),
         ],
       ),
       child: Column(
@@ -92,33 +101,56 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("ACTIVE VOICE", style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
               Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)),
-                child: const Icon(LucideIcons.waves, color: Colors.white, size: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(LucideIcons.zap, color: AppTheme.logoSage, size: 14),
+                    SizedBox(width: 6),
+                    Text("ACTIVE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.0)),
+                  ],
+                ),
               ),
+              const Icon(LucideIcons.moreHorizontal, color: Colors.white54),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(activeVoice['name']!, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text("Last synthesized: Just now", style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12)),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppTheme.logoSage,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text("Sample Playback", style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          )
+          Text(
+            activeVoice['name']!,
+            style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Ready to speak • Natural Tone",
+            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+          ),
+          const SizedBox(height: 32),
+          Container(
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(20, (index) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  width: 4,
+                  height: 10 + (index % 5) * 8.0,
+                  decoration: BoxDecoration(
+                    color: AppTheme.logoSage.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              }),
+            ),
+          ),
         ],
       ),
     );
@@ -126,31 +158,34 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
 
   Widget _buildVoiceItem(Map<String, String> voice, bool isActive) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: isActive ? Border.all(color: AppTheme.logoSage.withOpacity(0.3), width: 2) : null,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isActive ? AppTheme.logoSage : Colors.transparent,
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
           )
         ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            height: 48,
+            width: 48,
             decoration: BoxDecoration(
-              color: isActive ? AppTheme.logoSage.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-              shape: BoxShape.circle,
+              color: isActive ? AppTheme.logoSage.withOpacity(0.1) : AppTheme.backgroundClean,
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
-              isActive ? LucideIcons.check : LucideIcons.mic,
+              isActive ? LucideIcons.volume2 : LucideIcons.mic,
               color: isActive ? AppTheme.logoSage : Colors.grey,
-              size: 20,
             ),
           ),
           const SizedBox(width: 16),
@@ -158,61 +193,58 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(voice['name']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryDark)),
-                Text("Created: ${voice['date']}", style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                Text(
+                  voice['name']!,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryDark),
+                ),
+                Text(
+                  voice['type'] ?? "Standard",
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                ),
               ],
             ),
           ),
           if (!isActive)
             TextButton(
               onPressed: () => setState(() => _activeVoiceId = voice['id']!),
-              child: const Text("SET ACTIVE", style: TextStyle(color: AppTheme.logoSage, fontWeight: FontWeight.bold, fontSize: 11)),
+              child: const Text("Select", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-          PopupMenuButton<String>(
-            icon: const Icon(LucideIcons.moreVertical, size: 20, color: Colors.grey),
-            onSelected: (val) {
-              if (val == 'delete') {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Voice deletion simulated.")));
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'rename', child: Text("Rename Voice")),
-              const PopupMenuItem(value: 'delete', child: Text("Delete Voice", style: TextStyle(color: AppTheme.logoRose))),
-            ],
-          )
         ],
       ),
     );
   }
 
-  Widget _buildCreateNewCard(BuildContext context) {
-    return InkWell(
+  Widget _buildCreateNewButton(BuildContext context) {
+    return GestureDetector(
       onTap: () => _navigateToWizard(context),
-      borderRadius: BorderRadius.circular(24),
       child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          border: Border.all(color: AppTheme.logoSage.withOpacity(0.2), width: 2, style: BorderStyle.solid),
+          color: Colors.white, // AppTheme.logoSage.withOpacity(0.1),
           borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppTheme.logoSage, width: 2, style: BorderStyle.solid),
         ),
-        child: Row(
+        child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: AppTheme.logoSage.withOpacity(0.1), shape: BoxShape.circle),
-              child: const Icon(LucideIcons.mic, color: AppTheme.logoSage),
-            ),
-            const SizedBox(width: 16),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Clone New Voice", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("Quick 30-second training process", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.logoSage.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
+              child: const Icon(LucideIcons.plus, color: AppTheme.logoSage, size: 28),
             ),
-            const Icon(LucideIcons.chevronRight, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              "Create New Voice",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryDark),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "Clone your voice in 30 seconds",
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+            ),
           ],
         ),
       ),

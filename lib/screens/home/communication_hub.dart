@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/emotion_indicator.dart';
 import '../../core/theme.dart';
@@ -45,8 +46,12 @@ class _CommunicationHubState extends State<CommunicationHub> {
         automaticallyImplyLeading: false,
         title: const Text("Real-Time Translation", style: TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 1.5, fontWeight: FontWeight.w800)),
         actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.bell, color: Colors.white, size: 24),
+            onPressed: () => context.push('/notifications'),
+          ),
           Container(
-            margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
+            margin: const EdgeInsets.only(right: 16, left: 8, top: 8, bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: _isCameraActive ? AppTheme.logoSage.withOpacity(0.15) : Colors.grey.withOpacity(0.15),

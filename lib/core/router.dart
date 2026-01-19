@@ -9,6 +9,11 @@ import '../screens/onboarding/voice_creation_wizard.dart';
 import '../screens/learning/gesture_library.dart';
 import '../screens/history/history_screen.dart';
 import '../screens/settings/account_settings.dart';
+import '../screens/settings/language_settings.dart';
+import '../screens/settings/accessibility_settings.dart';
+import '../screens/settings/privacy_settings.dart';
+import '../screens/notifications/notifications_screen.dart';
+import '../screens/learning/gesture_detail_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -48,6 +53,29 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/account-settings',
       builder: (context, state) => const AccountSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/language',
+      builder: (context, state) => const LanguageSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/accessibility',
+      builder: (context, state) => const AccessibilitySettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/privacy',
+      builder: (context, state) => const PrivacySettingsScreen(),
+    ),
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => const NotificationsScreen(),
+    ),
+    GoRoute(
+      path: '/gesture-detail',
+      builder: (context, state) {
+        final data = state.extra as Map<String, String>;
+        return GestureDetailScreen(gestureData: data);
+      },
     ),
   ],
 );

@@ -119,7 +119,7 @@ class _GestureLibraryScreenState extends State<GestureLibraryScreen> {
 
   Widget _buildGestureCard(Map<String, String> gesture) {
     return InkWell(
-      onTap: () => _showGestureDetails(gesture),
+      onTap: () => _navigateToDetail(gesture),
       borderRadius: BorderRadius.circular(24),
       child: Container(
         decoration: BoxDecoration(
@@ -178,88 +178,15 @@ class _GestureLibraryScreenState extends State<GestureLibraryScreen> {
     );
   }
 
-  void _showGestureDetails(Map<String, String> gesture) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(gesture['name']!, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                    Text(gesture['category']!, style: const TextStyle(color: AppTheme.logoSage, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: AppTheme.logoSage.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(LucideIcons.volume2, color: AppTheme.logoSage),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            // Placeholder for Animation
-            Container(
-              width: double.infinity,
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(LucideIcons.playCircle, size: 48, color: Colors.grey),
-                    SizedBox(height: 12),
-                    Text("Simulation Animation", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            const Text("HOW TO PERFORM", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.grey)),
-            const SizedBox(height: 12),
-            Text(
-              gesture['desc']!,
-              style: const TextStyle(fontSize: 16, height: 1.5, color: AppTheme.primaryDark),
-            ),
-            const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryDark,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: const Text("GOT IT", style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
+  void _navigateToDetail(Map<String, String> gesture) {
+    context.push(
+      '/gesture-detail',
+      extra: {
+        'id': gesture['name']!.toLowerCase(), // Using name as ID for now
+        'title': gesture['name']!,
+        'category': gesture['category']!,
+        'desc': gesture['desc']!,
+      },
     );
   }
 }
