@@ -7,6 +7,7 @@ import '../screens/navigation/main_navigation.dart';
 import '../screens/voice_studio/voice_library.dart';
 import '../screens/onboarding/voice_creation_wizard.dart';
 import '../screens/learning/gesture_library.dart';
+import '../screens/history/history_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -38,6 +39,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/learning',
       builder: (context, state) => const GestureLibraryScreen(),
+    ),
+    GoRoute(
+      path: '/history',
+      builder: (context, state) => const HistoryScreen(),
     ),
   ],
 );
