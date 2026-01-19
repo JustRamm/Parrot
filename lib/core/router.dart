@@ -6,6 +6,7 @@ import '../screens/auth/auth_screen.dart';
 import '../screens/navigation/main_navigation.dart';
 import '../screens/voice_studio/voice_library.dart';
 import '../screens/onboarding/voice_creation_wizard.dart';
+import '../screens/learning/gesture_library.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -33,6 +34,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/voice-wizard',
       builder: (context, state) => const VoiceCreationWizard(),
+    ),
+    GoRoute(
+      path: '/learning',
+      builder: (context, state) => const GestureLibraryScreen(),
     ),
   ],
 );

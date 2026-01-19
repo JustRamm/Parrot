@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../settings/emotion_config_screen.dart';
@@ -84,10 +85,11 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 40),
             
             // Menu Items
-            _buildMenuItem(LucideIcons.userCheck, "Account Details"),
-            _buildMenuItem(LucideIcons.history, "Translation History"),
-            _buildMenuItem(LucideIcons.creditCard, "Subscription"),
-            _buildMenuItem(LucideIcons.helpCircle, "Help & Support"),
+            _buildMenuItem(context, LucideIcons.bookOpen, "Gesture Library", onTap: () => context.push('/learning')),
+            _buildMenuItem(context, LucideIcons.userCheck, "Account Details"),
+            _buildMenuItem(context, LucideIcons.history, "Translation History"),
+            _buildMenuItem(context, LucideIcons.creditCard, "Subscription"),
+            _buildMenuItem(context, LucideIcons.helpCircle, "Help & Support"),
             
             const SizedBox(height: 32),
             Padding(
@@ -125,11 +127,11 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(IconData icon, String title) {
+  Widget _buildMenuItem(BuildContext context, IconData icon, String title, {VoidCallback? onTap}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: InkWell(
-        onTap: () {},
+        onTap: onTap ?? () {},
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
