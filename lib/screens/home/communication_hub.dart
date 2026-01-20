@@ -29,7 +29,9 @@ class _CommunicationHubState extends State<CommunicationHub> {
   
   final AudioPlayer _audioPlayer = AudioPlayer();
   final ApiService _apiService = ApiService();
+  final http.Client _httpClient = http.Client();
   bool _isSpeaking = false;
+  bool _isFetchingFrame = false;
 
   @override
   void initState() {
@@ -80,6 +82,8 @@ class _CommunicationHubState extends State<CommunicationHub> {
     _transcriptionController.dispose();
     socket?.dispose();
     _audioPlayer.dispose();
+    _httpClient.close();
+    _stopPolling();
     super.dispose();
   }
 
@@ -88,10 +92,49 @@ class _CommunicationHubState extends State<CommunicationHub> {
       _isCameraActive = !_isCameraActive;
       if (_isCameraActive) {
         socket?.connect();
+        _startPolling();
       } else {
         socket?.disconnect();
+        _stopPolling();
       }
     });
+  }
+
+  void _startPolling() {
+    _stopPolling(); // Ensure no duplicates
+    _isPolling = true;
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 40), (timer) {
+      if (_isCameraActive && _isPolling && !_isFetchingFrame) {
+        _fetchFrame();
+      }
+    });
+  }
+
+  void _stopPolling() {
+    _isPolling = false;
+    _isFetchingFrame = false;
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+
+  Future<void> _fetchFrame() async {
+    _isFetchingFrame = true;
+    try {
+      // Use the video_frame endpoint which returns a single JPG
+      // Reusing _httpClient is much faster on Windows/Web
+      final response = await _httpClient.get(Uri.parse('http://127.0.0.1:5000/video_frame'));
+      if (response.statusCode == 200) {
+        if (mounted) {
+          setState(() {
+            _frameBytes = response.bodyBytes;
+          });
+        }
+      }
+    } catch (e) {
+      // Don't spam console if connection failed once
+    } finally {
+      _isFetchingFrame = false;
+    }
   }
 
   Future<void> _speakText() async {
@@ -202,24 +245,15 @@ class _CommunicationHubState extends State<CommunicationHub> {
                         alignment: Alignment.center,
                         children: [
                           if (_isCameraActive)
-                               Image.network(
-                                 'http://127.0.0.1:5000/video_feed',
-                                 fit: BoxFit.cover,
-                                 width: double.infinity,
-                                 height: double.infinity,
-                                 errorBuilder: (context, error, stackTrace) {
-                                   return Center(
-                                     child: Column(
-                                       mainAxisAlignment: MainAxisAlignment.center,
-                                       children: [
-                                         const Icon(LucideIcons.wifiOff, color: Colors.white24, size: 48),
-                                         const SizedBox(height: 16),
-                                         Text("Stream Error: $error", style: const TextStyle(color: Colors.white24, fontSize: 10)),
-                                       ],
-                                     ),
-                                   );
-                                 },
-                               )
+                            _frameBytes != null 
+                              ? Image.memory(
+                                  _frameBytes!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  gaplessPlayback: true, // Smooth transitions
+                                )
+                              : const Center(child: CircularProgressIndicator(color: AppTheme.logoSage))
                           else
                             Icon(
                               LucideIcons.cameraOff, 

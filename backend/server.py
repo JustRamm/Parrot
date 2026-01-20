@@ -180,17 +180,13 @@ class VideoCamera(object):
                             debug_image = draw_landmarks(debug_image, item['landmarks'])
                             debug_image = draw_info_text(debug_image, item['brect'], item['handedness'], item['label'])
                 
-                # Draw live timestamp
-                import datetime
-                cv.putText(debug_image, f"LIVE: {datetime.datetime.now().strftime('%H:%M:%S')}", (20, 40),
-                           cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                
-                ret, jpeg = cv.imencode('.jpg', debug_image, [int(cv.IMWRITE_JPEG_QUALITY), 70])
+                # ret, jpeg = cv.imencode('.jpg', debug_image, [int(cv.IMWRITE_JPEG_QUALITY), 70])
+                ret, jpeg = cv.imencode('.jpg', debug_image, [int(cv.IMWRITE_JPEG_QUALITY), 50])
                 if ret:
                     with self.lock:
                         self.frame = jpeg.tobytes()
                 
-                eventlet.sleep(0.035) # ~28 FPS
+                eventlet.sleep(0.02) # ~50 FPS target for capture
             except Exception as e:
                 print(f"Loop ERROR: {e}")
                 eventlet.sleep(0.1)
@@ -397,7 +393,7 @@ def gen(camera):
         if frame is not None:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
-        eventlet.sleep(0.03)
+        eventlet.sleep(0.01)
 
 @app.route('/video_feed')
 def video_feed():
@@ -543,6 +539,6 @@ if __name__ == '__main__':
         os.makedirs(os.path.join(backend_dir, 'tts', 'checkpoints'), exist_ok=True)
 
         print("Starting Flask Server...")
-        socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+        socketio.run(app, debug=False, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
     except Exception as e:
         print(f"Server crashed: {e}")
