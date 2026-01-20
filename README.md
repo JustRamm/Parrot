@@ -72,37 +72,66 @@ The project requires a Python backend for video processing and voice cloning.
 
 ---
 
-## 🧠 Customizing Gestures & Training
+## 🎓 AI Communication Model Training Guide
 
-You can train Parrot to recognize your own custom gestures or new words.
+Parrot is trained to recognize specific sign language gestures, but you can easily extend it to understand new words or adapt it to your unique hand movements.
 
-### 1. Update Labels
-Edit `backend/video/model/keypoint_classifier/keypoint_classifier_label.csv` and add your new word labels (one per line).
+### **Step 1: Define Your Words**
+The system currently supports **19 gesture classes**. You can rename existing ones or retrain them entirely.
 
-### 2. Collect Data
-Run the data collector script to capture your hand movements for each word.
-```bash
-cd backend/video
-python keypoint_collector.py
-```
-*   Use keys **0-9** for the first 10 labels and **a-z** for subsequent labels.
-*   Press and hold the key while performing the gesture to record data frames.
-*   Collect ~100-200 frames per gesture for best results.
-*   Press 'q' to save and exit.
+1.  Navigate to the file:
+    `backend/video/model/keypoint_classifier/keypoint_classifier_label.csv`
+2.  Open it in any text editor.
+3.  Each line represents a word class.
+    *   Line 1 corresponds to ID `0`
+    *   Line 2 corresponds to ID `1`
+    *   ...etc.
+4.  Change the text of the line you wish to train (e.g., change "Hello" to "Greetings").
 
-### 3. Train the Model
-Run the training script to generate a new AI model based on your collected data.
-```bash
-cd backend/video
-python train_classifier.py
-```
-This will automatically save the new `keypoint_classifier.tflite` model.
+### **Step 2: Collect Training Data**
+You need to record examples of your hand signs so the AI can learn from them.
 
-### 4. Restart Server
-Restart the backend server to apply changes:
-```bash
-python server.py
-```
+1.  Open your terminal and navigate to the video backend:
+    ```bash
+    cd backend/video
+    ```
+2.  Launch the data collector:
+    ```bash
+    python keypoint_collector.py
+    ```
+3.  **How to Record**:
+    *   **IDs 0-9**: Press keys **`0`** through **`9`** on your keyboard.
+    *   **IDs 10-18**: Press keys **`a`** through **`i`** on your keyboard.
+4.  **Process**:
+    *   Perform the gesture in front of the camera.
+    *   **Hold down** the corresponding key to log data frames.
+    *   Vary your hand position slightly (distance, angle) to make the model robust.
+    *   Aim for **100-300 samples** per gesture for high accuracy.
+5.  Press `q` to save and exit.
+
+### **Step 3: Train the Neural Network**
+This step processes your recorded data into a new AI model file.
+
+1.  In the same `backend/video` directory, run:
+    ```bash
+    python train_classifier.py
+    ```
+2.  The script will:
+    *   Load the dataset from `keypoint.csv`.
+    *   Train the model using TensorFlow.
+    *   Print the validation accuracy (aim for >90%).
+    *   Automatically export the new `keypoint_classifier.tflite` model.
+
+### **Step 4: Activate Changes**
+To see your new gestures in action:
+
+1.  Restart the backend server:
+    ```bash
+    # Go back to backend root if needed
+    cd ..
+    python server.py
+    ```
+2.  Restart the Flutter application to refresh the labels (if they were changed).
 
 ---
 
