@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../../services/api_service.dart';
 import '../../providers/app_state.dart';
+import '../../widgets/waveform_visualizer.dart';
 
 class TTSScreen extends StatefulWidget {
   const TTSScreen({super.key});
@@ -72,114 +73,273 @@ class _TTSScreenState extends State<TTSScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.surfaceWhite,
+      backgroundColor: AppTheme.backgroundClean,
       appBar: AppBar(
-        title: const Text("Voice Messenger", style: TextStyle(color: AppTheme.primaryDark, fontWeight: FontWeight.bold)),
+        title: Column(
+          children: [
+            Text(
+              "Voice Messenger",
+              style: TextStyle(
+                color: AppTheme.primaryDark,
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
+                letterSpacing: -0.5,
+              ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.logoSage,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  "Cloned Voice Active",
+                  style: TextStyle(
+                    color: AppTheme.primaryDark.withOpacity(0.5),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
         automaticallyImplyLeading: false,
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Message History
-          Expanded(
-            child: ListView.builder(
-              reverse: true,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.logoSage,
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(20),
-                              topRight: Radius.circular(20),
-                              bottomLeft: Radius.circular(20),
-                              bottomRight: Radius.circular(4),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.logoSage.withOpacity(0.2),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            message,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ),
+          Column(
+            children: [
+              // Message History or Empty State
+              Expanded(
+                child: _messages.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _messages[index];
+                          return _buildMessageBubble(message);
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      // Re-speak button
-                      IconButton(
-                        icon: const Icon(LucideIcons.volume2, size: 20, color: Colors.grey),
-                        onPressed: () => _speak(message),
+              ),
+              
+              // Input Area moved back to bottom but with floating style
+              _buildInputArea(),
+            ],
+          ),
+          
+          // Waveform Overlay when speaking
+          if (_isSpeaking)
+            Positioned(
+              bottom: 110,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
                       ),
                     ],
                   ),
-                );
-              },
-            ),
-          ),
-          // Input Area
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: TextField(
-                        controller: _textController,
-                        decoration: const InputDecoration(
-                          hintText: "Type a message to speak...",
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "Speaking",
+                        style: TextStyle(
+                          color: AppTheme.logoSage,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
                         ),
-                        textCapitalization: TextCapitalization.sentences,
-                        onSubmitted: _speak,
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      WaveformVisualizer(isAnimating: true, color: AppTheme.logoSage),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  FloatingActionButton(
-                    onPressed: _isSpeaking ? null : () => _speak(_textController.text),
-                    backgroundColor: _isSpeaking ? Colors.grey : AppTheme.logoSage,
-                    elevation: 2,
-                    child: Icon(_isSpeaking ? LucideIcons.loader2 : LucideIcons.send, color: Colors.white),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 80), // Bottom nav clearance
         ],
       ),
     );
   }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppTheme.logoSage.withOpacity(0.05),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              LucideIcons.messageSquare,
+              size: 48,
+              color: AppTheme.logoSage.withOpacity(0.4),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Silence is Golden,\nBut your voice matters.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppTheme.primaryDark.withOpacity(0.3),
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Type anything to speak with your identity.",
+            style: TextStyle(
+              color: AppTheme.primaryDark.withOpacity(0.2),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          IconButton(
+            icon: const Icon(LucideIcons.rotateCcw, size: 16, color: Colors.grey),
+            onPressed: () => _speak(text),
+            visualDensity: VisualDensity.compact,
+            tooltip: "Repeat",
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.logoSage,
+                    AppTheme.logoSage.withOpacity(0.85),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(4),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.logoSage.withOpacity(0.25),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 110), // Significantly above the bottom nav
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _textController,
+                decoration: InputDecoration(
+                  hintText: "Type to speak...",
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+                textCapitalization: TextCapitalization.sentences,
+                onSubmitted: _speak,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            ),
+            if (_textController.text.isNotEmpty)
+              IconButton(
+                icon: const Icon(LucideIcons.x, size: 18, color: Colors.grey),
+                onPressed: () => setState(() => _textController.clear()),
+              ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _isSpeaking ? null : () => _speak(_textController.text),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _isSpeaking ? Colors.grey.shade200 : AppTheme.logoSage,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _isSpeaking ? LucideIcons.loader2 : LucideIcons.send,
+                  color: _isSpeaking ? Colors.grey : Colors.white,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
+
