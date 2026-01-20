@@ -62,7 +62,36 @@ The project requires a Python backend for video processing.
    python server.py
    ```
 
-## 📂 Project Structure
+### Customizing Gestures & Training
+
+You can train Parrot to recognize your own custom gestures or new words.
+
+**1. Update Labels**
+Edit `backend/model/keypoint_classifier/keypoint_classifier_label.csv` and add your new word labels (one per line).
+
+**2. Collect Data**
+Run the data collector script to capture your hand movements for each word.
+```bash
+cd backend
+python keypoint_collector.py
+```
+*   Use keys **0-9** for the first 10 labels and **a-z** for subsequent labels.
+*   Press and hold the key while performing the gesture to record data frames.
+*   Collect ~100-200 frames per gesture for best results.
+*   Press 'q' to save and exit.
+
+**3. Train the Model**
+Run the training script to generate a new AI model based on your collected data.
+```bash
+python train_classifier.py
+```
+This will automatically save the new `keypoint_classifier.tflite` model.
+
+**4. Restart Server**
+Restart the backend server to apply changes:
+```bash
+python server.py
+```
 
 - `lib/core`: Theme and global configurations.
 - `lib/screens/home`: Real-time translation hub and camera interface.
