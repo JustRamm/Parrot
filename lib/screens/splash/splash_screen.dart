@@ -210,7 +210,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 );
               },
               child: const Text(
-                "Powered by EchoSign Technology",
+                "Powered by ABIRAM, KARTHIK, GAUTHAM & GOKUL",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.grey,

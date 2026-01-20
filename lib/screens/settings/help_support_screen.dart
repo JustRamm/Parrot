@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
 
@@ -49,8 +50,8 @@ class HelpSupportScreen extends StatelessWidget {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primaryDark),
             ),
             const SizedBox(height: 16),
-            _buildActionItem(context, LucideIcons.fileText, "Terms of Service", "Read terms"),
-            _buildActionItem(context, LucideIcons.shield, "Privacy Policy", "Read policy"),
+            _buildActionItem(context, LucideIcons.fileText, "Terms of Service", "Read terms", onTap: () => context.push('/settings/terms')),
+            _buildActionItem(context, LucideIcons.shield, "Privacy Policy", "Read policy", onTap: () => context.push('/settings/privacy')),
           ],
         ),
       ),
@@ -83,42 +84,45 @@ class HelpSupportScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionItem(BuildContext context, IconData icon, String title, String subtitle) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppTheme.logoSage.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+  Widget _buildActionItem(BuildContext context, IconData icon, String title, String subtitle, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: Icon(icon, color: AppTheme.logoSage, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryDark)),
-              Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-            ],
-          ),
-          const Spacer(),
-          Icon(LucideIcons.chevronRight, color: Colors.grey.shade300, size: 16),
-        ],
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.logoSage.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: AppTheme.logoSage, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryDark)),
+                Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+              ],
+            ),
+            const Spacer(),
+            Icon(LucideIcons.chevronRight, color: Colors.grey.shade300, size: 16),
+          ],
+        ),
       ),
     );
   }

@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-// import 'package:flutter_tts/flutter_tts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
+import '../../services/api_service.dart';
+import '../../providers/app_state.dart';
 
 class TTSScreen extends StatefulWidget {
   const TTSScreen({super.key});
@@ -12,59 +15,58 @@ class TTSScreen extends StatefulWidget {
 
 class _TTSScreenState extends State<TTSScreen> {
   final TextEditingController _textController = TextEditingController();
-  // final FlutterTts _flutterTts = FlutterTts();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final ApiService _apiService = ApiService();
+  
   final List<String> _messages = [];
   bool _isSpeaking = false;
 
   @override
-  void initState() {
-    super.initState();
-    _initTts();
-  }
-
-  Future<void> _initTts() async {
-    /*
-    await _flutterTts.setLanguage("en-US");
-    await _flutterTts.setSpeechRate(0.5);
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setPitch(1.0);
-
-    _flutterTts.setStartHandler(() {
-      setState(() {
-        _isSpeaking = true;
-      });
-    });
-
-    _flutterTts.setCompletionHandler(() {
-      setState(() {
-        _isSpeaking = false;
-      });
-    });
-
-    _flutterTts.setErrorHandler((msg) {
-      setState(() {
-        _isSpeaking = false;
-      });
-    });
-    */
+  void dispose() {
+    _audioPlayer.dispose();
+    _textController.dispose();
+    super.dispose();
   }
 
   Future<void> _speak(String text) async {
-    if (text.isNotEmpty) {
-      // Add to local history
-      setState(() {
-        _messages.insert(0, text);
-      });
-      _textController.clear();
-      // await _flutterTts.speak(text);
-    }
-  }
+    if (text.isEmpty) return;
 
-  @override
-  void dispose() {
-    // _flutterTts.stop();
-    _textController.dispose();
-    super.dispose();
+    if (_isSpeaking) return;
+
+    // Add to specific history
+    setState(() {
+      _messages.insert(0, text);
+      _isSpeaking = true;
+    });
+    
+    // Clear input
+    _textController.clear();
+
+    try {
+      final embedding = AppState.voiceEmbedding.value;
+      if (embedding == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No custom voice found. Using standard voice.")));
+          }
+      }
+
+      // Synthesize
+      final audioBytes = await _apiService.synthesizeSpeech(text, embedding);
+      
+      // Play
+      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
+      
+      // Listen for completion (simple delay approx or player state)
+      _audioPlayer.onPlayerComplete.first.then((_) {
+         if (mounted) setState(() => _isSpeaking = false);
+      });
+
+    } catch (e) {
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+         setState(() => _isSpeaking = false);
+      }
+    }
   }
 
   @override
@@ -93,35 +95,36 @@ class _TTSScreenState extends State<TTSScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Container(
-                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: AppTheme.logoSage,
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
-                            bottomLeft: Radius.circular(20),
-                            bottomRight: Radius.circular(4),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.logoSage.withOpacity(0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.logoSage,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(20),
+                              topRight: Radius.circular(20),
+                              bottomLeft: Radius.circular(20),
+                              bottomRight: Radius.circular(4),
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          message,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.logoSage.withOpacity(0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            message,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       // Re-speak button
                       IconButton(
                         icon: const Icon(LucideIcons.volume2, size: 20, color: Colors.grey),
-                        onPressed: () {}, // () => _flutterTts.speak(message),
+                        onPressed: () => _speak(message),
                       ),
                     ],
                   ),
@@ -165,8 +168,8 @@ class _TTSScreenState extends State<TTSScreen> {
                   ),
                   const SizedBox(width: 12),
                   FloatingActionButton(
-                    onPressed: () => _speak(_textController.text),
-                    backgroundColor: AppTheme.logoSage,
+                    onPressed: _isSpeaking ? null : () => _speak(_textController.text),
+                    backgroundColor: _isSpeaking ? Colors.grey : AppTheme.logoSage,
                     elevation: 2,
                     child: Icon(_isSpeaking ? LucideIcons.loader2 : LucideIcons.send, color: Colors.white),
                   ),

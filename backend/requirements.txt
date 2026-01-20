@@ -7,3 +7,16 @@ tensorflow
 protobuf
 numpy
 eventlet
+torch
+torchvision
+torchaudio
+lightning
+langdetect
+ipython
+unidecode
+librosa
+amfm_decompy
+matplotlib
+gdown
+inflect
+tensorboard

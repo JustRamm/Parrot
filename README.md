@@ -13,66 +13,76 @@ Parrot is a cutting-edge Flutter application designed to bridge the communicatio
 
 ## 🛠 Tech Stack
 
-- **Framework**: [Flutter](https://flutter.dev)
-- **Icons**: [Lucide Icons](https://lucide.dev)
-- **State Management**: ValueNotifier & Provider patterns
-- **Design System**: Custom minimalist theme with logo-inspired sage, rose, and berry accents.
+- **Frontend Framework**: [Flutter](https://flutter.dev) (Dart)
+- **State Management**: Flutter Riverpod & ValueNotifier
+- **Backend Framework**: Flask (Python) with Socket.IO
+- **AI/ML**:
+  - **Video Processing**: MediaPipe (Hand Tracking) + TensorFlow Lite (Gesture Classification)
+  - **Voice Cloning**: Real-Time Voice Cloning (Encoder/Synthesizer/Vocoder)
+  - **TTS**: Parrot/SYSPIN (Standard fallback)
 
 ## 📱 Getting Started
 
 ### Prerequisites
 
-- Flutter SDK (Latest Stable)
-- Android Studio / VS Code
-- Git
+- **Flutter SDK** (Latest Stable)
+- **Python 3.8+**
+- **Git**
 
-### Installation
+---
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/JustRamm/Parrot.git
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd parrot
-   ```
-3. Install dependencies:
-   ```bash
-   flutter pub get
-   ```
-4. Run the application:
-   ```bash
-   flutter run
-   ```
+### Step 1: Backend Setup
 
-### Backend Setup
+The project requires a Python backend for video processing and voice cloning.
 
-The project requires a Python backend for video processing.
+1.  Navigate to the backend directory:
+    ```bash
+    cd backend
+    ```
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-2. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the server:
-   ```bash
-   python server.py
-   ```
+2.  Install Python dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-### Customizing Gestures & Training
+3.  Download required AI models (Voice Cloning):
+    ```bash
+    python download_models.py
+    ```
+
+4.  Run the server:
+    ```bash
+    python server.py
+    ```
+    The server listens on `http://127.0.0.1:5000` (or `0.0.0.0:5000`).
+
+---
+
+### Step 2: Application Setup
+
+1.  Open a new terminal in the root directory.
+2.  Install Flutter dependencies:
+    ```bash
+    flutter pub get
+    ```
+3.  Run the application:
+    ```bash
+    flutter run
+    ```
+
+---
+
+## 🧠 Customizing Gestures & Training
 
 You can train Parrot to recognize your own custom gestures or new words.
 
-**1. Update Labels**
-Edit `backend/model/keypoint_classifier/keypoint_classifier_label.csv` and add your new word labels (one per line).
+### 1. Update Labels
+Edit `backend/video/model/keypoint_classifier/keypoint_classifier_label.csv` and add your new word labels (one per line).
 
-**2. Collect Data**
+### 2. Collect Data
 Run the data collector script to capture your hand movements for each word.
 ```bash
-cd backend
+cd backend/video
 python keypoint_collector.py
 ```
 *   Use keys **0-9** for the first 10 labels and **a-z** for subsequent labels.
@@ -80,26 +90,41 @@ python keypoint_collector.py
 *   Collect ~100-200 frames per gesture for best results.
 *   Press 'q' to save and exit.
 
-**3. Train the Model**
+### 3. Train the Model
 Run the training script to generate a new AI model based on your collected data.
 ```bash
+cd backend/video
 python train_classifier.py
 ```
 This will automatically save the new `keypoint_classifier.tflite` model.
 
-**4. Restart Server**
+### 4. Restart Server
 Restart the backend server to apply changes:
 ```bash
 python server.py
 ```
 
-- `lib/core`: Theme and global configurations.
-- `lib/screens/home`: Real-time translation hub and camera interface.
-- `lib/screens/voice_studio`: Voice library management and cloned voices dashboard.
-- `lib/screens/onboarding`: Voice creation wizard and onboarding flows.
-- `lib/screens/profile`: User profile and settings management.
-- `lib/widgets`: Reusable UI components like Emotion Indicators and Waveform Visualizers.
+---
 
-## 📄 License
+## 📂 Backend Directory Structure
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+*   **`server.py`**: Main Flask entry point. Handles WebSockets & API.
+*   **`video/`**: Sign Language detection modules.
+    *   `keypoint_collector.py`: Data collection tool.
+    *   `train_classifier.py`: Model training script.
+    *   `model/`: Stores `hand_landmarker.task` and `keypoint_classifier.tflite`.
+*   **`clone/`**: Real-Time Voice Cloning engine.
+    *   `voice_cloning.py`: Logic for loading and running RTVC.
+    *   `saved_models/`: Stores `encoder.pt`, `synthesizer.pt`, `vocoder.pt`.
+*   **`tts/`**: Standard TTS fallback system.
+
+## 📱 Frontend Directory Structure
+
+*   `lib/core`: Theme, Router, and Global Configs.
+*   `lib/screens/home`: Real-time translation hub (`CommunicationHub`).
+*   `lib/screens/voice_studio`: Voice library and creation (`VoiceCreationWizard`).
+*   `lib/screens/tts`: Text-to-Speech text input screen (`TTSScreen`).
+*   `lib/services`: `ApiService` for communicating with the backend.
+*   `lib/providers`: Global state (User voice, Translated text).
+
+

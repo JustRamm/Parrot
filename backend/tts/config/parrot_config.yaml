@@ -1,0 +1,25 @@
+path:
+  root_path: "tts"
+  alignment_path: "tts/utils/aligner"
+
+transformer:
+  max_len: 2000
+  d_model: 256
+  encoder:
+    n_head: 2
+    n_layer: 4
+    dropout_p: 0.1
+  decoder:
+    n_head: 2
+    n_layer: 4
+    dropout_p: 0.1
+  conv_n_filter: 256
+  conv_kernel_sizes: [9, 1]
+
+duration_predictor:
+  n_filter: 256
+  kernel_size: 3
+  dropout_p: 0.1
+
+preprocess:
+  hubert_codes: 100

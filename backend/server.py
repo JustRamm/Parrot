@@ -14,7 +14,7 @@ from flask import Flask, Response
 from flask_socketio import SocketIO
 from flask_cors import CORS
 
-from model.keypoint_classifier.keypoint_classifier import KeyPointClassifier
+from video.model.keypoint_classifier.keypoint_classifier import KeyPointClassifier
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -32,20 +32,27 @@ is_processing = False
 
 class VideoCamera(object):
     def __init__(self):
-        # Open default camera
-        print("Initializing Camera...")
+        # Open camera with multiple backend attempts for Windows
+        print("Initializing Camera (Backends: DSHOW, MSMF)...")
         self.cap = cv.VideoCapture(0, cv.CAP_DSHOW)
         if not self.cap.isOpened():
-             print("Error: Could not open video source.")
+             self.cap = cv.VideoCapture(0, cv.CAP_MSMF)
+        if not self.cap.isOpened():
+             self.cap = cv.VideoCapture(0)
+             
+        if not self.cap.isOpened():
+             print("CRITICAL: Could not open any video source.")
         else:
-             print("Camera initialized successfully.")
+             print(f"Camera successfully opened. Backend: {self.cap.getBackendName()}")
 
-        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, 640) 
         self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
         self.cap.set(cv.CAP_PROP_FPS, 30)
         
-        # Load Model (Tasks API)
-        base_options = python.BaseOptions(model_asset_path='model/hand_landmarker.task')
+        # Load Model (Tasks API) - Updated Path to be absolute
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(script_dir, 'video', 'model', 'hand_landmarker.task')
+        base_options = python.BaseOptions(model_asset_path=model_path)
         options = vision.HandLandmarkerOptions(base_options=base_options,
                                                num_hands=2,
                                                min_hand_detection_confidence=0.7,
@@ -53,77 +60,140 @@ class VideoCamera(object):
                                                min_tracking_confidence=0.5)
         self.detector = vision.HandLandmarker.create_from_options(options)
         
-        self.keypoint_classifier = KeyPointClassifier()
+        kf_model_path = os.path.join(script_dir, 'video', 'model', 'keypoint_classifier', 'keypoint_classifier.tflite')
+        self.keypoint_classifier = KeyPointClassifier(model_path=kf_model_path)
         
-        # Load Labels
-        with open("model/keypoint_classifier/keypoint_classifier_label.csv", encoding="utf-8-sig") as f:
+        # Load Labels - Updated Path to be absolute
+        labels_path = os.path.join(script_dir, 'video', 'model', 'keypoint_classifier', 'keypoint_classifier_label.csv')
+        with open(labels_path, encoding="utf-8-sig") as f:
             keypoint_classifier_labels = csv.reader(f)
             self.keypoint_classifier_labels = [row[0] for row in keypoint_classifier_labels]
 
-        # Threading
+        # Threading and State
         self.lock = threading.Lock()
         self.running = True
-        self.frame = None
+        self.frame = None # Encoded JPEG
         self.text = ""
+        self.last_emitted_text = ""
+        
+        # Detection state
+        self.last_landmarks_data = None # Store (landmarks, handedness, label, brect)
+        self.is_detecting = False
+        
+        # Detection state
+        self.last_landmarks_data = None # Store (landmarks, handedness, label, brect)
+        self.needs_processing = False
         
         self.t = threading.Thread(target=self.update, args=())
         self.t.daemon = True
         self.t.start()
         
-    def update(self):
+        # Single detection worker thread
+        self.d_thread = threading.Thread(target=self.detection_worker, daemon=True)
+        self.d_thread.start()
+        
+    def detection_worker(self):
+        """Persistent worker for detection to avoid thread spawn overhead"""
         while self.running:
-            try:
-                ret, image = self.cap.read()
-                if not ret:
-                    continue
+            if not self.needs_processing or self.image_for_detection is None:
+                eventlet.sleep(0.01)
+                continue
                 
-                image = cv.flip(image, 1)  # Mirror display
-                debug_image = copy.deepcopy(image)
+            try:
+                img = self.image_for_detection.copy()
+                self.needs_processing = False
                 
                 # Detection
-                image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
-                
-                # Create MP Image
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
-                
-                # Detect
+                rgb_image = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
                 detection_result = self.detector.detect(mp_image)
                 
+                new_landmarks_data = []
                 detected_text = ""
                 
                 if detection_result.hand_landmarks:
                     for hand_landmarks, handedness in zip(detection_result.hand_landmarks, detection_result.handedness):
-                        brect = calc_bounding_rect(debug_image, hand_landmarks)
-                        landmark_list = calc_landmark_list(debug_image, hand_landmarks)
+                        brect = calc_bounding_rect(img, hand_landmarks)
+                        landmark_list = calc_landmark_list(img, hand_landmarks)
+                        
+                        # Classifier
                         pre_processed_landmark_list = pre_process_landmark(landmark_list)
                         hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
+                        
                         if 0 <= hand_sign_id < len(self.keypoint_classifier_labels):
                             label = self.keypoint_classifier_labels[hand_sign_id]
                         else:
                             label = "Unknown"
                         
-                        # Filter out placeholders
-                        if label == "_":
-                            label = ""
-
-                        detected_text = label
+                        if label == "_": label = ""
                         
-                        debug_image = draw_bounding_rect(True, debug_image, brect)
-                        debug_image = draw_landmarks(debug_image, landmark_list)
-                        debug_image = draw_info_text(debug_image, brect, handedness, label)
-
-                if detected_text != "":
-                    socketio.emit('text_update', {'text': detected_text})
-                    # Optional: Print to console for verification if not too spammy
-                    # print(f"Detected: {detected_text}")
+                        new_landmarks_data.append({
+                            'landmarks': landmark_list,
+                            'handedness': handedness,
+                            'label': label,
+                            'brect': brect
+                        })
+                        
+                        if label != "":
+                            detected_text = label
                 
-                ret, jpeg = cv.imencode('.jpg', debug_image)
+                with self.lock:
+                    self.last_landmarks_data = new_landmarks_data
+                    self.text = detected_text
+                    
+                    # Emit only if changed
+                    if detected_text != "" and detected_text != self.last_emitted_text:
+                        socketio.emit('text_update', {'text': detected_text})
+                        self.last_emitted_text = detected_text
+                        
+            except Exception as e:
+                print(f"Detection worker Error: {e}")
+            
+            eventlet.sleep(0.01)
+
+    def _trigger_detection(self, image):
+        """Signal the worker to process the latest frame"""
+        if not self.needs_processing:
+            self.image_for_detection = image
+            self.needs_processing = True
+
+    def update(self):
+        print("Starting video capture loop with detection...")
+        while self.running:
+            try:
+                ret, image = self.cap.read()
+                if not ret:
+                    eventlet.sleep(0.1)
+                    continue
+                
+                image = cv.flip(image, 1)
+                
+                # Signal detection worker
+                self._trigger_detection(image)
+                
+                # Draw landmarks and info
+                debug_image = image.copy()
+                with self.lock:
+                    if self.last_landmarks_data:
+                        for item in self.last_landmarks_data:
+                            debug_image = draw_bounding_rect(True, debug_image, item['brect'])
+                            debug_image = draw_landmarks(debug_image, item['landmarks'])
+                            debug_image = draw_info_text(debug_image, item['brect'], item['handedness'], item['label'])
+                
+                # Draw live timestamp
+                import datetime
+                cv.putText(debug_image, f"LIVE: {datetime.datetime.now().strftime('%H:%M:%S')}", (20, 40),
+                           cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                ret, jpeg = cv.imencode('.jpg', debug_image, [int(cv.IMWRITE_JPEG_QUALITY), 70])
                 if ret:
                     with self.lock:
                         self.frame = jpeg.tobytes()
-                        self.text = detected_text
+                
+                eventlet.sleep(0.035) # ~28 FPS
             except Exception as e:
-                print(f"Error in capture loop: {e}")
+                print(f"Loop ERROR: {e}")
+                eventlet.sleep(0.1)
         
     def __del__(self):
         self.running = False
@@ -315,12 +385,19 @@ def draw_info_text(image, brect, handedness, hand_sign_text):
 # --- Routes ---
 
 def gen(camera):
+    # Wait for first frame to avoid closing stream immediately
+    for _ in range(100):
+        frame, _ = camera.get_frame()
+        if frame is not None:
+            break
+        eventlet.sleep(0.05)
+        
     while True:
         frame, text = camera.get_frame()
-        if frame is None:
-            break
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+        if frame is not None:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+        eventlet.sleep(0.03)
 
 @app.route('/video_feed')
 def video_feed():
@@ -356,14 +433,28 @@ def test_disconnect():
 # ... (existing code for socketio setup)
 
 # --- Voice Cloning Integration ---
-from voice_cloning import VoiceCloningManager
+import sys
+import os
+# Add 'clone' folder to path so 'encoder', 'synthesizer', etc. can be imported directly
+sys.path.append(os.path.join(os.path.dirname(__file__), 'clone'))
+
+from clone.voice_cloning import VoiceCloningManager
+from tts.tts_manager import TTSManager
 import io
 import soundfile as sf
 from flask import request, jsonify
+import numpy as np
 
 # Initialize Voice Cloning Manager
-# Expects models in 'backend/saved_models/'
-vc_manager = VoiceCloningManager()
+# Expects models in 'backend/clone/saved_models/'
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+vc_manager = VoiceCloningManager(models_dir=os.path.join(backend_dir, "clone", "saved_models"))
+
+# Initialize TTS Manager
+tts_manager = TTSManager(
+    parrot_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "parrot_model.ckpt"), 
+    vocoder_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "vocoder_model.ckpt") 
+)
 
 @app.route('/clone_voice', methods=['POST'])
 def clone_voice():
@@ -393,19 +484,49 @@ def clone_voice():
 def synthesize():
     data = request.json
     text = data.get("text")
-    embedding = data.get("embedding")
+    embedding = data.get("embedding") # Optional now
     
-    if not text or not embedding:
-        return jsonify({"error": "Missing text or embedding"}), 400
+    if not text:
+        return jsonify({"error": "Missing text"}), 400
+    
+    wav = None
+    error = None
+    
+    # Strategy: 
+    # 1. If embedding provided, try Voice Cloning (RTVC).
+    # 2. If no embedding or RTVC fails/returns mock, try TTS Manager (Parrot).
+    
+    if embedding:
+        print("Synthesizing with Voice Cloning (RTVC)...")
+        wav, error = vc_manager.synthesize(text, embedding)
+    
+    # If no wav generated yet (no embedding passed, or error), try Standard TTS
+    if wav is None:
+        print("Synthesizing with Standard TTS (Parrot)...")
+        if error:
+            print(f"RTVC Error (fallback): {error}")
         
-    wav, error = vc_manager.synthesize(text, embedding)
-    
-    if error:
-        return jsonify({"error": error}), 500
+        # Use a default speaker ID for standard TTS
+        wav = tts_manager.synthesize(text, speaker_id=0)
+        
+        # tts_manager returns int16 numpy array or similar. We might need to normalize for consistency.
+        # vc_manager return float32 usually.
+        # Let's ensure consistency: Convert to float32 -1.0 to 1.0 for sf.write
+        if wav.dtype == np.int16:
+            wav = wav.astype(np.float32) / 32768.0
+            
+    if wav is None:
+        return jsonify({"error": "Synthesis failed"}), 500
         
     # Convert numpy audio to bytes
     buffer = io.BytesIO()
-    sf.write(buffer, wav, samplerate=vc_manager.synthesizer.sample_rate, format='WAV')
+    # Default sample rate differs: RTVC usually 22050, Parrot/Vocoder maybe 24000?
+    # We should track sample rates. For now assume 24000 for Parrot, 22050 for RTVC.
+    # We will pick 24000 if it came from TTSManager, 22050 from RTVC.
+    
+    sr = 22050 if embedding else 24000
+    
+    sf.write(buffer, wav, samplerate=sr, format='WAV')
     buffer.seek(0)
     
     return Response(buffer.read(), mimetype="audio/wav")
@@ -413,6 +534,15 @@ def synthesize():
 # ... (existing routes)
 
 if __name__ == '__main__':
-    # Run with allow_unsafe_werkzeug for compatibility with newer Flask versions
-    socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    try:
+        # Create directories if they don't exist
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        os.makedirs(os.path.join(backend_dir, 'clone', 'saved_models'), exist_ok=True)
+        os.makedirs(os.path.join(backend_dir, 'video', 'model'), exist_ok=True)
+        # We need a tts/checkpoints dir too
+        os.makedirs(os.path.join(backend_dir, 'tts', 'checkpoints'), exist_ok=True)
 
+        print("Starting Flask Server...")
+        socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    except Exception as e:
+        print(f"Server crashed: {e}")

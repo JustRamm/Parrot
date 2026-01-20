@@ -17,6 +17,8 @@ import '../screens/learning/gesture_detail_screen.dart';
 import '../screens/settings/help_support_screen.dart';
 import '../screens/settings/subscription_screen.dart';
 import '../screens/learning/practice_mode.dart';
+import '../screens/settings/terms_conditions_screen.dart';
+import '../screens/settings/privacy_policy_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -94,6 +96,14 @@ final GoRouter appRouter = GoRouter(
         final data = state.extra as Map<String, String>;
         return GestureDetailScreen(gestureData: data);
       },
+    ),
+    GoRoute(
+      path: '/settings/terms',
+      builder: (context, state) => const TermsConditionsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/privacy',
+      builder: (context, state) => const PrivacyPolicyScreen(),
     ),
   ],
 );

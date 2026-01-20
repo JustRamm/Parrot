@@ -52,7 +52,6 @@ class _CommunicationHubState extends State<CommunicationHub> {
   }
 
   void _initSocket() {
-    // 10.0.2.2 is needed for Android Emulator to reach localhost. 
     // For Desktop/Web 'http://127.0.0.1:5000' works better than localhost on Windows.
     socket = IO.io('http://127.0.0.1:5000', <String, dynamic>{
       'transports': ['websocket'],
@@ -78,7 +77,6 @@ class _CommunicationHubState extends State<CommunicationHub> {
 
   @override
   void dispose() {
-    _stopPolling();
     _transcriptionController.dispose();
     socket?.dispose();
     _audioPlayer.dispose();
@@ -90,44 +88,10 @@ class _CommunicationHubState extends State<CommunicationHub> {
       _isCameraActive = !_isCameraActive;
       if (_isCameraActive) {
         socket?.connect();
-        _startPolling();
       } else {
         socket?.disconnect();
-        _stopPolling();
       }
     });
-  }
-
-  void _startPolling() {
-      if (_isPolling) return;
-      _isPolling = true;
-      _pollNextFrame();
-  }
-
-  void _stopPolling() {
-      _isPolling = false;
-  }
-
-  Future<void> _pollNextFrame() async {
-    if (!mounted || !_isPolling) return;
-
-    try {
-      final response = await http.get(Uri.parse('http://127.0.0.1:5000/video_frame'));
-      if (response.statusCode == 200) {
-          if (mounted && _isPolling) {
-            setState(() {
-              _frameBytes = response.bodyBytes;
-            });
-          }
-      }
-    } catch (e) {
-      // debugPrint("Polling error: $e");
-    }
-
-    // Schedule next frame immediately
-    if (mounted && _isPolling) {
-      Future.delayed(const Duration(milliseconds: 1), _pollNextFrame);
-    }
   }
 
   Future<void> _speakText() async {
@@ -142,26 +106,30 @@ class _CommunicationHubState extends State<CommunicationHub> {
     setState(() => _isSpeaking = true);
     
     try {
-      // Check if we have a custom voice embedding
       final embedding = AppState.voiceEmbedding.value;
-      
-      if (embedding != null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Synthesizing with YOUR voice...")));
-        // Call Backend
-        final audioBytes = await _apiService.synthesizeSpeech(text, embedding);
-        
-        // Play Audio
-        await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
-      } else {
-        // Fallback or Alert
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text("No custom voice found! Create one in Voice Studio."),
-          action: SnackBarAction(label: "Go", onPressed: () {}), // Navigation context logic tricky here
-        ));
-        
-        // Optionally play using default System TTS if integrated, but strictly obeying "Functional" request
-        // We'll leave it as a prompt to create voice.
+      if (embedding == null) {
+        if (mounted) {
+           showDialog(
+             context: context,
+             builder: (ctx) => AlertDialog(
+               title: const Text("Voice Required"),
+               content: const Text("Please create your custom voice identity in Voice Studio first."),
+               actions: [
+                 TextButton(
+                   onPressed: () => Navigator.of(ctx).pop(),
+                   child: const Text("OK"),
+                 ),
+               ],
+             ),
+           );
+        }
+        return;
       }
+      
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Synthesizing with YOUR voice..."), duration: Duration(seconds: 1)));
+      final audioBytes = await _apiService.synthesizeSpeech(text, embedding);
+      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
+
     } catch (e) {
       print("TTS Error: $e");
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Speech Error: ${e.toString()}")));
@@ -178,15 +146,17 @@ class _CommunicationHubState extends State<CommunicationHub> {
         foregroundColor: Colors.white,
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: false,
         automaticallyImplyLeading: false,
-        title: const Text("Parrot", style: TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 1.5, fontWeight: FontWeight.w800)),
+        title: const Text("Parrot", style: TextStyle(color: Colors.white, fontSize: 18, letterSpacing: -0.5, fontWeight: FontWeight.w900)),
         actions: [
           IconButton(
             icon: const Icon(LucideIcons.bell, color: Colors.white, size: 24),
             onPressed: () => context.push('/notifications'),
           ),
+          const SizedBox(width: 4),
           Container(
-            margin: const EdgeInsets.only(right: 16, left: 8, top: 8, bottom: 8),
+            margin: const EdgeInsets.only(top: 8, bottom: 8, right: 16),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: _isCameraActive ? AppTheme.logoSage.withOpacity(0.15) : Colors.grey.withOpacity(0.15),
@@ -208,13 +178,12 @@ class _CommunicationHubState extends State<CommunicationHub> {
                 Text(_isCameraActive ? "LIVE" : "OFFLINE", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
               ],
             ),
-          )
+          ),
         ],
       ),
       extendBodyBehindAppBar: true,
       body: Column(
         children: [
-          // Camera Feed viewport (Top Half)
           Expanded(
             flex: 5,
             child: Stack(
@@ -233,16 +202,24 @@ class _CommunicationHubState extends State<CommunicationHub> {
                         alignment: Alignment.center,
                         children: [
                           if (_isCameraActive)
-                              /* Frame Polling Implementation */
-                              _frameBytes != null
-                                  ? Image.memory(
-                                      _frameBytes!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      gaplessPlayback: true,
-                                    )
-                                  : Center(child: CircularProgressIndicator(color: AppTheme.logoSage.withOpacity(0.5)))
+                               Image.network(
+                                 'http://127.0.0.1:5000/video_feed',
+                                 fit: BoxFit.cover,
+                                 width: double.infinity,
+                                 height: double.infinity,
+                                 errorBuilder: (context, error, stackTrace) {
+                                   return Center(
+                                     child: Column(
+                                       mainAxisAlignment: MainAxisAlignment.center,
+                                       children: [
+                                         const Icon(LucideIcons.wifiOff, color: Colors.white24, size: 48),
+                                         const SizedBox(height: 16),
+                                         Text("Stream Error: $error", style: const TextStyle(color: Colors.white24, fontSize: 10)),
+                                       ],
+                                     ),
+                                   );
+                                 },
+                               )
                           else
                             Icon(
                               LucideIcons.cameraOff, 
@@ -263,19 +240,10 @@ class _CommunicationHubState extends State<CommunicationHub> {
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 110, right: 24,
-                  child: ValueListenableBuilder<double>(
-                    valueListenable: AppState.emotionIntensity,
-                    builder: (context, val, _) => _isCameraActive 
-                      ? EmotionIndicator(intensity: val)
-                      : const SizedBox.shrink(),
-                  ),
-                ),
+                /* Removed EmotionIndicator (CALM) per user request */
               ],
             ),
           ),
-          // Transcription HUD (Bottom Half - Editable)
           Expanded(
             flex: 6,
             child: Container(
@@ -310,7 +278,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
                       expands: true,
                       readOnly: true,
                       enabled: true,
-                      textAlignVertical: TextAlignVertical.top,
+                      textAlignVertical: TextAlignVertical.center,
                       onChanged: (value) => AppState.translatedText.value = value,
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             height: 1.4,
@@ -358,7 +326,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 80), // Clearance for floating navbar
+                  const SizedBox(height: 80),
                 ],
               ),
             ),

@@ -33,17 +33,21 @@ class ApiService {
     }
   }
 
-  Future<List<int>> synthesizeSpeech(String text, List<dynamic> embedding) async {
+  Future<List<int>> synthesizeSpeech(String text, List<dynamic>? embedding) async {
     var uri = Uri.parse('$baseUrl/synthesize');
     
     try {
+      final Map<String, dynamic> body = {
+        'text': text,
+      };
+      if (embedding != null) {
+        body['embedding'] = embedding;
+      }
+
       var response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'text': text,
-          'embedding': embedding,
-        }),
+        body: json.encode(body),
       );
 
       if (response.statusCode == 200) {

@@ -103,8 +103,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
             if (assetPath != null)
               Image.asset(
                 assetPath,
-                width: 24,
-                height: 24,
+                width: 28,
+                height: 28,
                 color: isSelected ? null : Colors.grey.shade400, // Tint grey if not selected (might need adjustment based on image type)
                 opacity: isSelected ? const AlwaysStoppedAnimation(1.0) : const AlwaysStoppedAnimation(0.5),
               )
