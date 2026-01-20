@@ -13,5 +13,6 @@ class AppState {
   
   // Voice Cloning State
   static final ValueNotifier<List<dynamic>?> voiceEmbedding = ValueNotifier(null);
-  static final ValueNotifier<String?> currentVoiceId = ValueNotifier(null);
+  static final ValueNotifier<String?> currentVoiceId = ValueNotifier("1");
+  static final ValueNotifier<String> currentVoiceProfile = ValueNotifier("Natural");
 }

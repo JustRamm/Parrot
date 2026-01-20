@@ -52,7 +52,11 @@ class _TTSScreenState extends State<TTSScreen> {
       }
 
       // Synthesize
-      final audioBytes = await _apiService.synthesizeSpeech(text, embedding);
+      final audioBytes = await _apiService.synthesizeSpeech(
+        text, 
+        embedding, 
+        voiceProfile: AppState.currentVoiceProfile.value
+      );
       
       // Play
       await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));

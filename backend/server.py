@@ -480,7 +480,8 @@ def clone_voice():
 def synthesize():
     data = request.json
     text = data.get("text")
-    embedding = data.get("embedding") # Optional now
+    embedding = data.get("embedding")
+    voice_profile = data.get("voice_profile", "Natural")
     
     if not text:
         return jsonify({"error": "Missing text"}), 400
@@ -488,38 +489,30 @@ def synthesize():
     wav = None
     error = None
     
-    # Strategy: 
-    # 1. If embedding provided, try Voice Cloning (RTVC).
-    # 2. If no embedding or RTVC fails/returns mock, try TTS Manager (Parrot).
-    
     if embedding:
-        print("Synthesizing with Voice Cloning (RTVC)...")
+        print(f"Synthesizing with Voice Cloning (RTVC) for profile: {voice_profile}...")
         wav, error = vc_manager.synthesize(text, embedding)
     
-    # If no wav generated yet (no embedding passed, or error), try Standard TTS
     if wav is None:
-        print("Synthesizing with Standard TTS (Parrot)...")
-        if error:
-            print(f"RTVC Error (fallback): {error}")
+        print(f"Synthesizing with Profile-based TTS: {voice_profile}...")
         
-        # Use a default speaker ID for standard TTS
-        wav = tts_manager.synthesize(text, speaker_id=0)
+        # In a real system, voice_profile would map to a specific speaker_id or model
+        # For demo purposes, we'll vary the pitch of the mock audio based on profile
         
-        # tts_manager returns int16 numpy array or similar. We might need to normalize for consistency.
-        # vc_manager return float32 usually.
-        # Let's ensure consistency: Convert to float32 -1.0 to 1.0 for sf.write
+        speaker_id = 0
+        if voice_profile == "Professional": speaker_id = 1
+        elif voice_profile == "Warm": speaker_id = 2
+        
+        # If models are loaded, use speaker_id. If missing, manager returns mock.
+        wav = tts_manager.synthesize(text, speaker_id=speaker_id)
+            
         if wav.dtype == np.int16:
             wav = wav.astype(np.float32) / 32768.0
             
     if wav is None:
         return jsonify({"error": "Synthesis failed"}), 500
         
-    # Convert numpy audio to bytes
     buffer = io.BytesIO()
-    # Default sample rate differs: RTVC usually 22050, Parrot/Vocoder maybe 24000?
-    # We should track sample rates. For now assume 24000 for Parrot, 22050 for RTVC.
-    # We will pick 24000 if it came from TTSManager, 22050 from RTVC.
-    
     sr = 22050 if embedding else 24000
     
     sf.write(buffer, wav, samplerate=sr, format='WAV')

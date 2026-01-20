@@ -171,7 +171,11 @@ class _CommunicationHubState extends State<CommunicationHub> {
       }
       
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Synthesizing with YOUR voice..."), duration: Duration(seconds: 1)));
-      final audioBytes = await _apiService.synthesizeSpeech(text, embedding);
+      final audioBytes = await _apiService.synthesizeSpeech(
+        text, 
+        embedding, 
+        voiceProfile: AppState.currentVoiceProfile.value
+      );
       await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
 
     } catch (e) {

@@ -141,7 +141,7 @@ class TTSManager:
     def synthesize(self, text, speaker_id=0):
         if not self.parrot_model or not self.vocoder_model:
             print("TTS Models missing, generating mock audio.")
-            return self.mock_audio()
+            return self.mock_audio(speaker_id=speaker_id)
         
         try:
             # 1. Text to Phones/Tokens
@@ -161,7 +161,7 @@ class TTSManager:
             # phones = torch.tensor([1, 2, 3]).long().unsqueeze(0).to(self.device) 
             
             # Placeholder until we read symbols
-            return self.mock_audio()
+            return self.mock_audio(speaker_id=speaker_id)
             
             # 2. Parrot Inference
             # batch = {
@@ -186,13 +186,19 @@ class TTSManager:
             
         except Exception as e:
             print(f"Synthesis failed: {e}")
-            return self.mock_audio()
+            return self.mock_audio(speaker_id=speaker_id)
 
-    def mock_audio(self):
-        # Generate a sine wave
+    def mock_audio(self, speaker_id=0):
+        # Generate a sine wave with varying pitch based on speaker_id
         sample_rate = 24000
         duration = 2.0
+        
+        # Vary frequency: Natural (0) = 440Hz, Formal (1) = 380Hz, Casual (2) = 520Hz
+        freq = 440
+        if speaker_id == 1: freq = 380 
+        elif speaker_id == 2: freq = 520
+        
         t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        audio = 0.5 * np.sin(2 * np.pi * 440 * t)
+        audio = 0.5 * np.sin(2 * np.pi * freq * t)
         return (audio * 32767).astype(np.int16)
 

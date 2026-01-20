@@ -33,7 +33,7 @@ class ApiService {
     }
   }
 
-  Future<List<int>> synthesizeSpeech(String text, List<dynamic>? embedding) async {
+  Future<List<int>> synthesizeSpeech(String text, List<dynamic>? embedding, {String? voiceProfile}) async {
     var uri = Uri.parse('$baseUrl/synthesize');
     
     try {
@@ -42,6 +42,9 @@ class ApiService {
       };
       if (embedding != null) {
         body['embedding'] = embedding;
+      }
+      if (voiceProfile != null) {
+        body['voice_profile'] = voiceProfile;
       }
 
       var response = await http.post(
