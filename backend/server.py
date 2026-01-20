@@ -349,6 +349,67 @@ def test_connect():
 def test_disconnect():
     print('Client disconnected')
 
+
+# ... (existing code for socketio setup)
+
+# --- Voice Cloning Integration ---
+from voice_cloning import VoiceCloningManager
+import io
+import soundfile as sf
+from flask import request, jsonify
+
+# Initialize Voice Cloning Manager
+# Expects models in 'backend/saved_models/'
+vc_manager = VoiceCloningManager()
+
+@app.route('/clone_voice', methods=['POST'])
+def clone_voice():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+    
+    audio_file = request.files['audio']
+    
+    # Save to temp file to load with librosa/preprocess_wav
+    # Or load directly if utilities support it.
+    # Here we define a simplified flow:
+    try:
+        temp_path = "temp_voice_input.wav"
+        audio_file.save(temp_path)
+        
+        result = vc_manager.clone_voice(temp_path)
+        
+        # Cleanup
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/synthesize', methods=['POST'])
+def synthesize():
+    data = request.json
+    text = data.get("text")
+    embedding = data.get("embedding")
+    
+    if not text or not embedding:
+        return jsonify({"error": "Missing text or embedding"}), 400
+        
+    wav, error = vc_manager.synthesize(text, embedding)
+    
+    if error:
+        return jsonify({"error": error}), 500
+        
+    # Convert numpy audio to bytes
+    buffer = io.BytesIO()
+    sf.write(buffer, wav, samplerate=vc_manager.synthesizer.sample_rate, format='WAV')
+    buffer.seek(0)
+    
+    return Response(buffer.read(), mimetype="audio/wav")
+
+# ... (existing routes)
+
 if __name__ == '__main__':
     # Run with allow_unsafe_werkzeug for compatibility with newer Flask versions
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+
