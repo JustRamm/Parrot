@@ -3,16 +3,16 @@ import 'core/theme.dart';
 import 'core/router.dart';
 
 void main() {
-  runApp(const EchoSignApp());
+  runApp(const ParrotApp());
 }
 
-class EchoSignApp extends StatelessWidget {
-  const EchoSignApp({super.key});
+class ParrotApp extends StatelessWidget {
+  const ParrotApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'EchoSign',
+      title: 'Parrot',
       theme: AppTheme.lightTheme,
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,

@@ -6,6 +6,7 @@ Parrot is a cutting-edge Flutter application designed to bridge the communicatio
 
 - **Real-Time Translation**: Convert sign language gestures into text instantly using advanced computer vision.
 - **Voice Studio**: Create and manage personalized AI voice clones that sound just like the user.
+- **Voice Messenger**: A built-in Text-to-Speech tool for quick, typed communication.
 - **Emotion Detection**: Integrated emotion indicators that adjust based on gesture intensity and sentiment.
 - **Interactive HUD**: An editable transcription area that allows users to refine translated text before speaking it out.
 - **Premium UI**: A sleek, dark-themed interface built with Flutter's latest Material 3 components and Lucide icons.
@@ -42,6 +43,23 @@ Parrot is a cutting-edge Flutter application designed to bridge the communicatio
 4. Run the application:
    ```bash
    flutter run
+   ```
+
+### Backend Setup
+
+The project requires a Python backend for video processing.
+
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Run the server:
+   ```bash
+   python server.py
    ```
 
 ## 📂 Project Structure

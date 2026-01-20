@@ -14,6 +14,9 @@ import '../screens/settings/accessibility_settings.dart';
 import '../screens/settings/privacy_settings.dart';
 import '../screens/notifications/notifications_screen.dart';
 import '../screens/learning/gesture_detail_screen.dart';
+import '../screens/settings/help_support_screen.dart';
+import '../screens/settings/subscription_screen.dart';
+import '../screens/learning/practice_mode.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -47,6 +50,13 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const GestureLibraryScreen(),
     ),
     GoRoute(
+      path: '/practice',
+      builder: (context, state) {
+        final data = state.extra as Map<String, dynamic>;
+        return PracticeModeScreen(gestureName: data['gestureName']);
+      },
+    ),
+    GoRoute(
       path: '/history',
       builder: (context, state) => const HistoryScreen(),
     ),
@@ -65,6 +75,14 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/privacy',
       builder: (context, state) => const PrivacySettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/help',
+      builder: (context, state) => const HelpSupportScreen(),
+    ),
+    GoRoute(
+      path: '/subscription',
+      builder: (context, state) => const SubscriptionScreen(),
     ),
     GoRoute(
       path: '/notifications',

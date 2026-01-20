@@ -16,18 +16,23 @@ class _AppOnboardingScreenState extends State<AppOnboardingScreen> {
 
   final List<OnboardingData> _pages = [
     OnboardingData(
-      title: "Express Naturally",
-      description: "EchoSign uses advanced Sign Language Recognition to bridge the communication gap in real-time.",
+      title: "Speak with Your Hands",
+      description: "Parrot translates your sign language into speech instantly, bridging the gap in real-time communication.",
       icon: LucideIcons.hand,
     ),
     OnboardingData(
-      title: "Personalized Voice",
-      description: "Don't settle for robotic voices. Clone your own voice or a loved one's to maintain your unique identity.",
+      title: "Your Voice, Your Identity",
+      description: "Create a personalized AI voice clone that sounds just like you, removing the robotic barrier.",
       icon: LucideIcons.mic2,
     ),
     OnboardingData(
-      title: "Feel the Emotion",
-      description: "Our AI detects the intensity of your movements to inject genuine emotion into your speech output.",
+      title: "Voice Messenger",
+      description: "Type to speak instantly using our built-in Text-to-Speech messenger for quick interactions.",
+      icon: LucideIcons.messageSquare,
+    ),
+    OnboardingData(
+      title: "Express Every Emotion",
+      description: "Our AI understands the intensity of your gestures to deliver your message with the right emotional tone.",
       icon: LucideIcons.heart,
     ),
   ];
@@ -35,88 +40,198 @@ class _AppOnboardingScreenState extends State<AppOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
-          PageView.builder(
-            controller: _pageController,
-            onPageChanged: (index) => setState(() => _currentPage = index),
-            itemCount: _pages.length,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.all(40.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(40),
-                      decoration: BoxDecoration(
-                        color: AppTheme.logoRose.withOpacity(0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _pages[index].icon,
-                        size: 80,
-                        color: AppTheme.logoRose,
-                      ),
-                    ),
-                    const SizedBox(height: 64),
-                    Text(
-                      _pages[index].title,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      _pages[index].description,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: AppTheme.primaryDark.withOpacity(0.7),
-                        height: 1.6,
-                      ),
-                    ),
+          // Background Gradient decoration
+          Positioned.fill(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white,
+                    AppTheme.logoSage.withOpacity(0.05 + (_currentPage * 0.02)),
+                    AppTheme.logoSage.withOpacity(0.1 + (_currentPage * 0.03)),
                   ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
-          Positioned(
-            bottom: 60,
-            left: 40,
-            right: 40,
+          
+          SafeArea(
             child: Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _pages.length,
-                    (index) => AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      height: 8,
-                      width: _currentPage == index ? 24 : 8,
-                      decoration: BoxDecoration(
-                        color: _currentPage == index ? AppTheme.logoRose : AppTheme.logoRose.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+                Expanded(
+                  flex: 3,
+                  child: PageView.builder(
+                    controller: _pageController,
+                    onPageChanged: (index) => setState(() => _currentPage = index),
+                    itemCount: _pages.length,
+                    itemBuilder: (context, index) {
+                      return OnboardingContent(
+                        data: _pages[index],
+                        isActive: _currentPage == index,
+                      );
+                    },
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            _pages.length,
+                            (index) => AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              height: 8,
+                              width: _currentPage == index ? 32 : 8,
+                              decoration: BoxDecoration(
+                                color: _currentPage == index ? AppTheme.logoSage : AppTheme.logoSage.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (_currentPage == _pages.length - 1) {
+                                context.go('/auth');
+                              } else {
+                                _pageController.nextPage(
+                                  duration: const Duration(milliseconds: 500),
+                                  curve: Curves.easeOutQuart,
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryDark,
+                              foregroundColor: Colors.white,
+                              elevation: 8,
+                              shadowColor: AppTheme.logoSage.withOpacity(0.4),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _currentPage == _pages.length - 1 ? "Get Started" : "Continue",
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(LucideIcons.arrowRight, size: 20),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_currentPage != _pages.length - 1)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: TextButton(
+                              onPressed: () => context.go('/auth'),
+                              child: Text(
+                                "Skip",
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 24),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 48),
-                ElevatedButton(
-                  onPressed: () {
-                    if (_currentPage == _pages.length - 1) {
-                      context.go('/auth');
-                    } else {
-                      _pageController.nextPage(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-                  },
-                  child: Text(_currentPage == _pages.length - 1 ? "Get Started" : "Next"),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class OnboardingContent extends StatelessWidget {
+  final OnboardingData data;
+  final bool isActive;
+
+  const OnboardingContent({super.key, required this.data, required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(40.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOutBack,
+            height: isActive ? 200 : 180,
+            width: isActive ? 200 : 180,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.logoSage.withOpacity(0.15),
+                  blurRadius: 40,
+                  offset: const Offset(0, 20),
+                  spreadRadius: isActive ? 10 : 0,
                 ),
               ],
+            ),
+            child: Center(
+              child: Icon(
+                data.icon,
+                size: 80,
+                color: AppTheme.logoSage,
+              ),
+            ),
+          ),
+          const SizedBox(height: 64),
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 300),
+            opacity: isActive ? 1.0 : 0.5,
+            child: Text(
+              data.title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: AppTheme.primaryDark,
+                letterSpacing: -0.5,
+                height: 1.2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 400),
+            opacity: isActive ? 1.0 : 0.0,
+            child: Text(
+              data.description,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: AppTheme.primaryDark.withOpacity(0.6),
+                height: 1.6,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

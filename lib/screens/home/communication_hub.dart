@@ -134,7 +134,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: const Text("Real-Time Translation", style: TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 1.5, fontWeight: FontWeight.w800)),
+        title: const Text("Parrot", style: TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 1.5, fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
             icon: const Icon(LucideIcons.bell, color: Colors.white, size: 24),

@@ -169,6 +169,23 @@ class _GestureLibraryScreenState extends State<GestureLibraryScreen> {
                       style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.logoSage),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        context.push('/practice', extra: {'gestureName': gesture['name']});
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.logoSage,
+                        side: BorderSide(color: AppTheme.logoSage.withOpacity(0.5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 0),
+                        minimumSize: const Size(0, 32),
+                      ),
+                      child: const Text("Practice", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
                 ],
               ),
             ),

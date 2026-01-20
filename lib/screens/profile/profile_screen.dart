@@ -91,8 +91,8 @@ class ProfileScreen extends StatelessWidget {
             _buildMenuItem(context, LucideIcons.globe, "Language & Region", onTap: () => context.push('/settings/language')),
             _buildMenuItem(context, LucideIcons.eye, "Accessibility", onTap: () => context.push('/settings/accessibility')),
             _buildMenuItem(context, LucideIcons.lock, "Privacy & Security", onTap: () => context.push('/settings/privacy')),
-             _buildMenuItem(context, LucideIcons.creditCard, "Subscription"),
-             _buildMenuItem(context, LucideIcons.helpCircle, "Help & Support"),
+             _buildMenuItem(context, LucideIcons.creditCard, "Subscription", onTap: () => context.push('/subscription')),
+             _buildMenuItem(context, LucideIcons.helpCircle, "Help & Support", onTap: () => context.push('/settings/help')),
             
             const SizedBox(height: 32),
             Padding(
@@ -100,7 +100,10 @@ class ProfileScreen extends StatelessWidget {
               child: SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    // Navigate back to auth screen on logout
+                    context.go('/auth');
+                  },
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.logoRose,
                     padding: const EdgeInsets.symmetric(vertical: 16),
