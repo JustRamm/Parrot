@@ -24,18 +24,9 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surfaceWhite,
       appBar: AppBar(
-        title: const Text("Voice Studio", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20, letterSpacing: -0.5)),
+        title: null,
         centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.plus, color: AppTheme.primaryDark),
-            style: IconButton.styleFrom(
-              backgroundColor: AppTheme.backgroundClean,
-            ),
-            onPressed: () => _navigateToWizard(context),
-          ),
-          const SizedBox(width: 16),
-        ],
+        actions: const [],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24),
