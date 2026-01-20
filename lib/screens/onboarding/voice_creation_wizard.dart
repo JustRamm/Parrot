@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/waveform_visualizer.dart';
 import '../../core/theme.dart';
+import '../../services/api_service.dart';
 
 class VoiceCreationWizard extends StatefulWidget {
   const VoiceCreationWizard({super.key});
@@ -14,8 +16,19 @@ class VoiceCreationWizard extends StatefulWidget {
 
 class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
   int _currentStep = 0;
+  String? _selectedFilePath;
+  String? _selectedFileName;
+  bool _isProcessing = false;
+  final ApiService _apiService = ApiService();
 
   void _nextStep() {
+    if (_currentStep == 1 && _selectedFilePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a voice file first.")),
+      );
+      return;
+    }
+
     if (_currentStep < 2) {
       setState(() => _currentStep++);
     } else {
@@ -23,37 +36,73 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
     }
   }
 
-  void _generateVoice() async {
-    // Navigate to a loading state or similar if needed
-    
-    // Simulate processing steps
-    AppState.voiceCreationProgress.value = 0.1;
-    for (int i = 1; i <= 5; i++) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        AppState.voiceCreationProgress.value = i / 10;
-    }
-
-    // Assign a Mock Embedding for demonstration since we lack the actual model files/upload
-    // In a real scenario, we would call:
-    // final result = await ApiService().cloneVoice(path);
-    // AppState.voiceEmbedding.value = result['embedding'];
-    
-    // Default embedding (just random valid floats to pass basic checks if we had them)
-    AppState.voiceEmbedding.value = List.filled(256, 0.1); 
-    AppState.currentVoiceId.value = "custom_voice_1";
-
-    for (int i = 6; i <= 10; i++) {
-        await Future.delayed(const Duration(milliseconds: 200));
-        AppState.voiceCreationProgress.value = i / 10;
-    }
-    
-    AppState.isVoiceGenerated.value = true;
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Voice Identity Generated and Applied!")),
+  Future<void> _pickVoiceFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
       );
-      // Automatically go to home or library?
-       context.go('/main');
+
+      if (result != null) {
+        setState(() {
+          _selectedFilePath = result.files.single.path;
+          _selectedFileName = result.files.single.name;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error picking file: $e")),
+      );
+    }
+  }
+
+  void _generateVoice() async {
+    setState(() => _isProcessing = true);
+    AppState.voiceCreationProgress.value = 0.1;
+
+    try {
+      // Step 1: Upload and Clone
+      AppState.voiceCreationProgress.value = 0.3;
+      
+      if (_selectedFilePath == null) {
+         // Fallback for simulation if they skipped/hacked (shouldn't happen with validation)
+         throw Exception("No voice file provided.");
+      }
+
+      final result = await _apiService.cloneVoice(_selectedFilePath!);
+      AppState.voiceCreationProgress.value = 0.7;
+
+      if (result['success'] == true && result['embedding'] != null) {
+        AppState.voiceEmbedding.value = result['embedding'];
+        AppState.currentVoiceId.value = "custom_${DateTime.now().millisecondsSinceEpoch}";
+        AppState.isVoiceGenerated.value = true;
+        
+        AppState.voiceCreationProgress.value = 1.0;
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Voice Identity Generated Successfully!")),
+          );
+          context.go('/main');
+        }
+      } else {
+        throw Exception(result['error'] ?? "Unknown error from backend");
+      }
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Cloning Failed: ${e.toString()}"), 
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        AppState.voiceCreationProgress.value = 0.0;
+      }
     }
   }
 
@@ -87,25 +136,35 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
               child: _buildStepContent(),
             ),
             const SizedBox(height: 24),
+            
+            // Progress or Error status
             ValueListenableBuilder<double>(
               valueListenable: AppState.voiceCreationProgress,
               builder: (context, progress, child) {
-                if (progress > 0 && progress < 1.0) {
+                if (_isProcessing) {
                   return Column(
-                    children: [
-                      const Text("Synthesizing Identity...", style: TextStyle(fontStyle: FontStyle.italic)),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(value: progress),
-                      const SizedBox(height: 24),
-                    ],
+                     children: [
+                       const Text("Training Voice Model...", style: TextStyle(fontWeight: FontWeight.bold)),
+                       const SizedBox(height: 10),
+                       LinearProgressIndicator(value: progress),
+                       const SizedBox(height: 20),
+                     ],
                   );
                 }
-                return const SizedBox();
+                return const SizedBox.shrink();
               },
             ),
+
             ElevatedButton(
-              onPressed: _nextStep,
-              child: Text(_currentStep == 2 ? "Generate Identity" : "Continue"),
+              onPressed: _isProcessing ? null : _nextStep,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                backgroundColor: AppTheme.primaryDark,
+                foregroundColor: Colors.white,
+              ),
+              child: _isProcessing 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : Text(_currentStep == 2 ? "Generate Identity" : "Continue"),
             ),
           ],
         ),
@@ -148,17 +207,42 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
       children: [
         Text("Donor Voice", style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        const Text("Upload a clip of a family member to use as a signature base."),
+        const Text("Upload a clear audio clip (WAV/MP3) to use as a signature base. Ensure it is at least 3-5 seconds long."),
         const SizedBox(height: 24),
-        Container(
-          width: double.infinity, padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(border: Border.all(color: AppTheme.logoSage, width: 2),
-            borderRadius: BorderRadius.circular(16), color: AppTheme.logoSage.withOpacity(0.05)),
-          child: Column(children: const [
-            Icon(LucideIcons.uploadCloud, size: 48, color: AppTheme.logoSage),
-            SizedBox(height: 12),
-            Text("Select Voice File", style: TextStyle(fontWeight: FontWeight.w600)),
-          ]),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _pickVoiceFile,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              width: double.infinity, 
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.logoSage, width: 2),
+                borderRadius: BorderRadius.circular(16), 
+                color: _selectedFilePath != null ? AppTheme.logoSage.withOpacity(0.1) : AppTheme.logoSage.withOpacity(0.05)
+              ),
+              child: Column(
+                children: [
+                   Icon(
+                     _selectedFilePath != null ? LucideIcons.checkCircle : LucideIcons.uploadCloud, 
+                     size: 48, 
+                     color: AppTheme.logoSage
+                   ),
+                   const SizedBox(height: 12),
+                   Text(
+                     _selectedFileName ?? "Select Voice File", 
+                     style: const TextStyle(fontWeight: FontWeight.w600)
+                   ),
+                   if (_selectedFileName != null)
+                     Padding(
+                       padding: const EdgeInsets.only(top: 8.0),
+                       child: Text("Ready to clone", style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                     )
+                ]
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -168,32 +252,28 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Residual Sounds", style: Theme.of(context).textTheme.titleLarge),
+        Text("Confirmation", style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        const Text("Record any sounds you can make to personalize the AI model."),
+        const Text("We are ready to generate your voice identity model based on the uploaded sample."),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.amber.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber.withOpacity(0.3)),
+          ),
+          child: const Row(
+            children: [
+              Icon(LucideIcons.alertTriangle, color: Colors.amber, size: 20),
+              SizedBox(width: 12),
+              Expanded(child: Text("Ensure the backend server is running and models are loaded.", style: TextStyle(fontSize: 12, color: Colors.black87))),
+            ],
+          ),
+        ),
         const SizedBox(height: 48),
         Center(
-          child: ValueListenableBuilder<bool>(
-            valueListenable: AppState.isRecording,
-            builder: (context, recording, _) {
-              return Column(children: [
-                WaveformVisualizer(isAnimating: recording, color: AppTheme.logoSage),
-                const SizedBox(height: 40),
-                GestureDetector(
-                  onTapDown: (_) => AppState.isRecording.value = true,
-                  onTapUp: (_) => AppState.isRecording.value = false,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(color: recording ? AppTheme.primaryDark : AppTheme.logoSage, shape: BoxShape.circle),
-                    child: const Icon(LucideIcons.mic, color: Colors.white, size: 32),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text("HOLD TO RECORD", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 1.5)),
-              ]);
-            },
-          ),
+          child: Icon(LucideIcons.fingerprint, size: 80, color: AppTheme.logoSage.withOpacity(0.5)),
         ),
       ],
     );

@@ -154,8 +154,8 @@ class _CommunicationHubState extends State<CommunicationHub> {
         await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
       } else {
         // Fallback or Alert
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("No custom voice found! Create one in Voice Studio."),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text("No custom voice found! Create one in Voice Studio."),
           action: SnackBarAction(label: "Go", onPressed: () {}), // Navigation context logic tricky here
         ));
         

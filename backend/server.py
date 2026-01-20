@@ -4,6 +4,7 @@ import copy
 import csv
 import itertools
 import threading
+import os
 import cv2 as cv
 import numpy as np
 import eventlet
@@ -22,7 +23,8 @@ app = Flask(__name__)
 # Allow CORS for all domains for development
 CORS(app)
 # Initialize SocketIO with eventlet async mode and logging
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', logger=True, engineio_logger=True)
+# Initialize SocketIO with eventlet async mode
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', logger=False, engineio_logger=False)
 
 # Global camera instance
 camera = None
@@ -110,9 +112,10 @@ class VideoCamera(object):
                         debug_image = draw_landmarks(debug_image, landmark_list)
                         debug_image = draw_info_text(debug_image, brect, handedness, label)
 
-                # Emit detected text if any
                 if detected_text != "":
                     socketio.emit('text_update', {'text': detected_text})
+                    # Optional: Print to console for verification if not too spammy
+                    # print(f"Detected: {detected_text}")
                 
                 ret, jpeg = cv.imencode('.jpg', debug_image)
                 if ret:
