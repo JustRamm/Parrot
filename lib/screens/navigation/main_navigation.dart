@@ -73,8 +73,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildNavItem(0, "Translate", assetPath: "assets/icons/parrot_active.png"),
-                _buildNavItem(1, "Speak", assetPath: "assets/icons/speech_bubble_active.png"),
+                _buildNavItem(0, "Translate", assetPath: "assets/icons/parrot_active.png", iconSize: 32),
+                _buildNavItem(1, "Speak", assetPath: "assets/icons/speech_bubble_active.png", iconSize: 32),
                 _buildNavItem(2, "Voice", icon: LucideIcons.mic2),
                 _buildNavItem(3, "Profile", icon: LucideIcons.user),
               ],
@@ -85,7 +85,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     );
   }
 
-  Widget _buildNavItem(int index, String label, {IconData? icon, String? assetPath}) {
+  Widget _buildNavItem(int index, String label, {IconData? icon, String? assetPath, double iconSize = 24}) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
@@ -103,8 +103,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
             if (assetPath != null)
               Image.asset(
                 assetPath,
-                width: 28,
-                height: 28,
+                width: iconSize,
+                height: iconSize,
                 color: isSelected ? null : Colors.grey.shade400, // Tint grey if not selected (might need adjustment based on image type)
                 opacity: isSelected ? const AlwaysStoppedAnimation(1.0) : const AlwaysStoppedAnimation(0.5),
               )
@@ -112,7 +112,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
               Icon(
                 icon,
                 color: isSelected ? AppTheme.logoSage : Colors.grey.shade400,
-                size: 24,
+                size: iconSize,
               ),
             AnimatedSize(
               duration: const Duration(milliseconds: 300),
