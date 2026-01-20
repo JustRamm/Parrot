@@ -20,90 +20,110 @@ import '../screens/learning/practice_mode.dart';
 import '../screens/settings/terms_conditions_screen.dart';
 import '../screens/settings/privacy_policy_screen.dart';
 
+// Helper function for custom premium transitions
+Page<dynamic> _buildPageWithAnimation(Widget child, GoRouterState state) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      // Premium Fade + Subtle Slide Transition
+      return FadeTransition(
+        opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0.05, 0), end: Offset.zero)
+              .animate(CurveTween(curve: Curves.easeOut).animate(animation)),
+          child: child,
+        ),
+      );
+    },
+    transitionDuration: const Duration(milliseconds: 300),
+  );
+}
+
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => const SplashScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const SplashScreen(), state),
     ),
     GoRoute(
       path: '/onboarding',
-      builder: (context, state) => const AppOnboardingScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const AppOnboardingScreen(), state),
     ),
     GoRoute(
       path: '/auth',
-      builder: (context, state) => const AuthScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const AuthScreen(), state),
     ),
     GoRoute(
       path: '/main',
-      builder: (context, state) => const MainNavigationWrapper(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const MainNavigationWrapper(), state),
     ),
     GoRoute(
       path: '/voice-library',
-      builder: (context, state) => const VoiceLibraryScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const VoiceLibraryScreen(), state),
     ),
     GoRoute(
       path: '/voice-wizard',
-      builder: (context, state) => const VoiceCreationWizard(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const VoiceCreationWizard(), state),
     ),
     GoRoute(
       path: '/learning',
-      builder: (context, state) => const GestureLibraryScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const GestureLibraryScreen(), state),
     ),
     GoRoute(
       path: '/practice',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final data = state.extra as Map<String, dynamic>;
-        return PracticeModeScreen(gestureName: data['gestureName']);
+        return _buildPageWithAnimation(PracticeModeScreen(gestureName: data['gestureName']), state);
       },
     ),
     GoRoute(
       path: '/history',
-      builder: (context, state) => const HistoryScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const HistoryScreen(), state),
     ),
     GoRoute(
       path: '/account-settings',
-      builder: (context, state) => const AccountSettingsScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const AccountSettingsScreen(), state),
     ),
     GoRoute(
       path: '/settings/language',
-      builder: (context, state) => const LanguageSettingsScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const LanguageSettingsScreen(), state),
     ),
     GoRoute(
       path: '/settings/accessibility',
-      builder: (context, state) => const AccessibilitySettingsScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const AccessibilitySettingsScreen(), state),
     ),
     GoRoute(
       path: '/settings/privacy',
-      builder: (context, state) => const PrivacySettingsScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const PrivacySettingsScreen(), state),
     ),
     GoRoute(
       path: '/settings/help',
-      builder: (context, state) => const HelpSupportScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const HelpSupportScreen(), state),
     ),
     GoRoute(
-      path: '/subscription',
-      builder: (context, state) => const SubscriptionScreen(),
+      path: '/settings/subscription',
+      pageBuilder: (context, state) => _buildPageWithAnimation(const SubscriptionScreen(), state),
     ),
     GoRoute(
       path: '/notifications',
-      builder: (context, state) => const NotificationsScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const NotificationsScreen(), state),
     ),
     GoRoute(
       path: '/gesture-detail',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final data = state.extra as Map<String, String>;
-        return GestureDetailScreen(gestureData: data);
+        return _buildPageWithAnimation(GestureDetailScreen(gestureData: data), state);
       },
     ),
     GoRoute(
       path: '/settings/terms',
-      builder: (context, state) => const TermsConditionsScreen(),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const TermsConditionsScreen(), state),
     ),
     GoRoute(
-      path: '/settings/privacy',
-      builder: (context, state) => const PrivacyPolicyScreen(),
+      path: '/settings/privacy-policy',
+      pageBuilder: (context, state) => _buildPageWithAnimation(const PrivacyPolicyScreen(), state),
     ),
   ],
 );

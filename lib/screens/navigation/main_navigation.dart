@@ -25,6 +25,12 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
   ];
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheImage(const AssetImage("assets/icons/parrot_active.png"), context);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true, // Allows body to extend behind the navbar
@@ -73,8 +79,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildNavItem(0, "Translate", assetPath: "assets/icons/parrot_active.png", iconSize: 32),
-                _buildNavItem(1, "Speak", assetPath: "assets/icons/speech_bubble_active.png", iconSize: 32),
+                _buildNavItem(0, "Translate", assetPath: "assets/icons/parrot_active.png", iconSize: 40),
+                _buildNavItem(1, "Speak", icon: LucideIcons.messageCircle),
                 _buildNavItem(2, "Voice", icon: LucideIcons.mic2),
                 _buildNavItem(3, "Profile", icon: LucideIcons.user),
               ],
