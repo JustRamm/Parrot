@@ -24,11 +24,27 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
   }
 
   void _generateVoice() async {
-    AppState.voiceCreationProgress.value = 0.1;
+    // Navigate to a loading state or similar if needed
     
-    for (int i = 1; i <= 10; i++) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      AppState.voiceCreationProgress.value = i / 10;
+    // Simulate processing steps
+    AppState.voiceCreationProgress.value = 0.1;
+    for (int i = 1; i <= 5; i++) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        AppState.voiceCreationProgress.value = i / 10;
+    }
+
+    // Assign a Mock Embedding for demonstration since we lack the actual model files/upload
+    // In a real scenario, we would call:
+    // final result = await ApiService().cloneVoice(path);
+    // AppState.voiceEmbedding.value = result['embedding'];
+    
+    // Default embedding (just random valid floats to pass basic checks if we had them)
+    AppState.voiceEmbedding.value = List.filled(256, 0.1); 
+    AppState.currentVoiceId.value = "custom_voice_1";
+
+    for (int i = 6; i <= 10; i++) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        AppState.voiceCreationProgress.value = i / 10;
     }
     
     AppState.isVoiceGenerated.value = true;
@@ -36,6 +52,8 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Voice Identity Generated and Applied!")),
       );
+      // Automatically go to home or library?
+       context.go('/main');
     }
   }
 

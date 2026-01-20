@@ -5,9 +5,11 @@ import 'package:http/http.dart' as http;
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:audioplayers/audioplayers.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/emotion_indicator.dart';
 import '../../core/theme.dart';
+import '../../services/api_service.dart';
 
 class CommunicationHub extends StatefulWidget {
   const CommunicationHub({super.key});
@@ -24,6 +26,10 @@ class _CommunicationHubState extends State<CommunicationHub> {
   Uint8List? _frameBytes;
   Timer? _pollingTimer;
   bool _isPolling = false;
+  
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final ApiService _apiService = ApiService();
+  bool _isSpeaking = false;
 
   @override
   void initState() {
@@ -75,6 +81,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
     _stopPolling();
     _transcriptionController.dispose();
     socket?.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -117,11 +124,49 @@ class _CommunicationHubState extends State<CommunicationHub> {
       // debugPrint("Polling error: $e");
     }
 
-    // Schedule next frame immediately after current one finishes to avoid stacking
+    // Schedule next frame immediately
     if (mounted && _isPolling) {
-      // Small delay to prevent UI freezing if response is instant (though http usually isn't)
-      // Duration.zero typically schedules for next microtask/frame
       Future.delayed(const Duration(milliseconds: 1), _pollNextFrame);
+    }
+  }
+
+  Future<void> _speakText() async {
+    if (_isSpeaking) return;
+    
+    final text = _transcriptionController.text;
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nothing to speak!")));
+      return;
+    }
+
+    setState(() => _isSpeaking = true);
+    
+    try {
+      // Check if we have a custom voice embedding
+      final embedding = AppState.voiceEmbedding.value;
+      
+      if (embedding != null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Synthesizing with YOUR voice...")));
+        // Call Backend
+        final audioBytes = await _apiService.synthesizeSpeech(text, embedding);
+        
+        // Play Audio
+        await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
+      } else {
+        // Fallback or Alert
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("No custom voice found! Create one in Voice Studio."),
+          action: SnackBarAction(label: "Go", onPressed: () {}), // Navigation context logic tricky here
+        ));
+        
+        // Optionally play using default System TTS if integrated, but strictly obeying "Functional" request
+        // We'll leave it as a prompt to create voice.
+      }
+    } catch (e) {
+      print("TTS Error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Speech Error: ${e.toString()}")));
+    } finally {
+      setState(() => _isSpeaking = false);
     }
   }
 
@@ -289,11 +334,11 @@ class _CommunicationHubState extends State<CommunicationHub> {
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Synthesizing personalized voice output..."), behavior: SnackBarBehavior.floating),
-                          ),
-                          icon: const Icon(LucideIcons.volume2, size: 20),
-                          label: const Text("SPEAK OUT"),
+                          onPressed: _isSpeaking ? null : _speakText,
+                          icon: _isSpeaking 
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(LucideIcons.volume2, size: 20),
+                          label: Text(_isSpeaking ? "SPEAKING..." : "SPEAK OUT"),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.logoSage,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
