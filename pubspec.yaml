@@ -40,6 +40,7 @@ dependencies:
   lucide_icons: ^0.257.0
   state_notifier: ^1.0.0
   socket_io_client: ^3.1.4
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

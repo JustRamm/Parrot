@@ -14,7 +14,9 @@ from flask_socketio import SocketIO
 from flask_cors import CORS
 
 from model.keypoint_classifier.keypoint_classifier import KeyPointClassifier
-from utils.cvfpscalc import CvFpsCalc
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 app = Flask(__name__)
 # Allow CORS for all domains for development
@@ -29,14 +31,16 @@ is_processing = False
 class VideoCamera(object):
     def __init__(self):
         # Open default camera
-        self.cap = cv.VideoCapture(0)
-        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, 960)
-        self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, 540)
-        
-        # Open default camera
-        self.cap = cv.VideoCapture(0)
-        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, 960)
-        self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, 540)
+        print("Initializing Camera...")
+        self.cap = cv.VideoCapture(0, cv.CAP_DSHOW)
+        if not self.cap.isOpened():
+             print("Error: Could not open video source.")
+        else:
+             print("Camera initialized successfully.")
+
+        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv.CAP_PROP_FPS, 30)
         
         # Load Model (Tasks API)
         base_options = python.BaseOptions(model_asset_path='model/hand_landmarker.task')
@@ -53,61 +57,73 @@ class VideoCamera(object):
         with open("model/keypoint_classifier/keypoint_classifier_label.csv", encoding="utf-8-sig") as f:
             keypoint_classifier_labels = csv.reader(f)
             self.keypoint_classifier_labels = [row[0] for row in keypoint_classifier_labels]
-            
-        self.cvFpsCalc = CvFpsCalc(buffer_len=10)
+
+        # Threading
+        self.lock = threading.Lock()
+        self.running = True
+        self.frame = None
+        self.text = ""
+        
+        self.t = threading.Thread(target=self.update, args=())
+        self.t.daemon = True
+        self.t.start()
+        
+    def update(self):
+        while self.running:
+            try:
+                ret, image = self.cap.read()
+                if not ret:
+                    continue
+                
+                image = cv.flip(image, 1)  # Mirror display
+                debug_image = copy.deepcopy(image)
+                
+                # Detection
+                image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+                
+                # Create MP Image
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
+                
+                # Detect
+                detection_result = self.detector.detect(mp_image)
+                
+                detected_text = ""
+                
+                if detection_result.hand_landmarks:
+                    for hand_landmarks, handedness in zip(detection_result.hand_landmarks, detection_result.handedness):
+                        brect = calc_bounding_rect(debug_image, hand_landmarks)
+                        landmark_list = calc_landmark_list(debug_image, hand_landmarks)
+                        pre_processed_landmark_list = pre_process_landmark(landmark_list)
+                        hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
+                        label = self.keypoint_classifier_labels[hand_sign_id]
+                        detected_text = label
+                        
+                        debug_image = draw_bounding_rect(True, debug_image, brect)
+                        debug_image = draw_landmarks(debug_image, landmark_list)
+                        debug_image = draw_info_text(debug_image, brect, handedness, label)
+
+                # Emit detected text if any
+                if detected_text != "":
+                    socketio.emit('text_update', {'text': detected_text})
+                
+                ret, jpeg = cv.imencode('.jpg', debug_image)
+                if ret:
+                    with self.lock:
+                        self.frame = jpeg.tobytes()
+                        self.text = detected_text
+            except Exception as e:
+                print(f"Error in capture loop: {e}")
         
     def __del__(self):
-        self.cap.release()
+        self.running = False
+        if self.cap.isOpened():
+             self.cap.release()
 
     def get_frame(self):
-        ret, image = self.cap.read()
-        if not ret:
-            return None, None
-
-        image = cv.flip(image, 1)  # Mirror display
-        debug_image = copy.deepcopy(image)
-        
-        # Detection
-        image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
-        
-        # Create MP Image
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
-        
-        # Detect
-        detection_result = self.detector.detect(mp_image)
-        
-        detected_text = ""
-
-        # Process results
-        # Tasks API returns extraction_result.hand_landmarks as list of list of NormalizedLandmark
-        if detection_result.hand_landmarks:
-            for hand_landmarks, handedness in zip(detection_result.hand_landmarks, detection_result.handedness):
-                # Bounding box calculation
-                brect = calc_bounding_rect(debug_image, hand_landmarks)
-                # Landmark calculation
-                landmark_list = calc_landmark_list(debug_image, hand_landmarks)
-
-                # Conversion to relative coordinates / normalized coordinates
-                pre_processed_landmark_list = pre_process_landmark(landmark_list)
-
-                # Hand sign classification
-                hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
-                
-                # Get label
-                label = self.keypoint_classifier_labels[hand_sign_id]
-                detected_text = label
-
-                # Draw
-                debug_image = draw_bounding_rect(True, debug_image, brect)
-                debug_image = draw_landmarks(debug_image, landmark_list)
-                debug_image = draw_info_text(debug_image, brect, handedness, label)
-
-        # Emit detected text if any
-        if detected_text != "":
-            socketio.emit('text_update', {'text': detected_text})
-
-        ret, jpeg = cv.imencode('.jpg', debug_image)
-        return jpeg.tobytes(), detected_text
+        with self.lock:
+            if self.frame is None:
+                 return None, None
+            return self.frame, self.text
 
 
 # --- Helper Functions from app.py ---
@@ -302,6 +318,16 @@ def video_feed():
         camera = VideoCamera()
     return Response(gen(camera),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/video_frame')
+def video_frame():
+    global camera
+    if camera is None:
+        camera = VideoCamera()
+    frame, _ = camera.get_frame()
+    if frame is None:
+        return "", 500
+    return Response(frame, mimetype='image/jpeg')
 
 @app.route('/')
 def index():

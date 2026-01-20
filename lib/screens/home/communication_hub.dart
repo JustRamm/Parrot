@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
@@ -17,8 +20,10 @@ class _CommunicationHubState extends State<CommunicationHub> {
   late TextEditingController _transcriptionController;
   bool _isCameraActive = false;
   IO.Socket? socket;
-  // Use unique key to force refresh of image stream when toggled
-  Key _streamKey = UniqueKey();
+  // Polling variables
+  Uint8List? _frameBytes;
+  Timer? _pollingTimer;
+  bool _isPolling = false;
 
   @override
   void initState() {
@@ -67,6 +72,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
 
   @override
   void dispose() {
+    _stopPolling();
     _transcriptionController.dispose();
     socket?.dispose();
     super.dispose();
@@ -77,12 +83,46 @@ class _CommunicationHubState extends State<CommunicationHub> {
       _isCameraActive = !_isCameraActive;
       if (_isCameraActive) {
         socket?.connect();
-        // Refresh stream key to force ID reset
-        _streamKey = UniqueKey();
+        _startPolling();
       } else {
         socket?.disconnect();
+        _stopPolling();
       }
     });
+  }
+
+  void _startPolling() {
+      if (_isPolling) return;
+      _isPolling = true;
+      _pollNextFrame();
+  }
+
+  void _stopPolling() {
+      _isPolling = false;
+  }
+
+  Future<void> _pollNextFrame() async {
+    if (!mounted || !_isPolling) return;
+
+    try {
+      final response = await http.get(Uri.parse('http://127.0.0.1:5000/video_frame'));
+      if (response.statusCode == 200) {
+          if (mounted && _isPolling) {
+            setState(() {
+              _frameBytes = response.bodyBytes;
+            });
+          }
+      }
+    } catch (e) {
+      // debugPrint("Polling error: $e");
+    }
+
+    // Schedule next frame immediately after current one finishes to avoid stacking
+    if (mounted && _isPolling) {
+      // Small delay to prevent UI freezing if response is instant (though http usually isn't)
+      // Duration.zero typically schedules for next microtask/frame
+      Future.delayed(const Duration(milliseconds: 1), _pollNextFrame);
+    }
   }
 
   @override
@@ -148,28 +188,16 @@ class _CommunicationHubState extends State<CommunicationHub> {
                         alignment: Alignment.center,
                         children: [
                           if (_isCameraActive)
-                            // MJPEG Stream from Python Backend
-                            Image.network(
-                              'http://127.0.0.1:5000/video_feed',
-                              key: _streamKey,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
-                              gaplessPlayback: true,
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return Center(child: CircularProgressIndicator(color: AppTheme.logoSage.withOpacity(0.5)));
-                              },
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Center(
-                                  child: Text(
-                                    "Server Offline\nRun: python server.py",
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                                  ),
-                                );
-                              },
-                            )
+                              /* Frame Polling Implementation */
+                              _frameBytes != null
+                                  ? Image.memory(
+                                      _frameBytes!,
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      gaplessPlayback: true,
+                                    )
+                                  : Center(child: CircularProgressIndicator(color: AppTheme.logoSage.withOpacity(0.5)))
                           else
                             Icon(
                               LucideIcons.cameraOff, 

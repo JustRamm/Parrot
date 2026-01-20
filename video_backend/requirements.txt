@@ -6,5 +6,4 @@ mediapipe
 tensorflow
 protobuf
 numpy
-gevent
-gevent-websocket
+eventlet
