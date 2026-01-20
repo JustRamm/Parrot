@@ -95,7 +95,15 @@ class VideoCamera(object):
                         landmark_list = calc_landmark_list(debug_image, hand_landmarks)
                         pre_processed_landmark_list = pre_process_landmark(landmark_list)
                         hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
-                        label = self.keypoint_classifier_labels[hand_sign_id]
+                        if 0 <= hand_sign_id < len(self.keypoint_classifier_labels):
+                            label = self.keypoint_classifier_labels[hand_sign_id]
+                        else:
+                            label = "Unknown"
+                        
+                        # Filter out placeholders
+                        if label == "_":
+                            label = ""
+
                         detected_text = label
                         
                         debug_image = draw_bounding_rect(True, debug_image, brect)
