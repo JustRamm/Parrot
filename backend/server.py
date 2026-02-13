@@ -1,34 +1,70 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+# Standard library imports
 import copy
 import csv
 import itertools
 import threading
 import os
+import sys
+import io
+import base64
+
+# Third-party imports
 import cv2 as cv
 import numpy as np
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, Response
+# Flask imports
+from flask import Flask, Response, request, jsonify
 from flask_socketio import SocketIO
 from flask_cors import CORS
 
-from video.model.keypoint_classifier.keypoint_classifier import KeyPointClassifier
+# Audio processing imports
+import soundfile as sf
+
+# MediaPipe imports
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+# Local imports - Video
+from video.model.keypoint_classifier.keypoint_classifier import KeyPointClassifier
+
+# Local imports - Voice Cloning
+sys.path.append(os.path.join(os.path.dirname(__file__), 'clone'))
+from clone.voice_cloning import VoiceCloningManager
+from tts.tts_manager import TTSManager
+
+# Flask app initialization
 app = Flask(__name__)
-# Allow CORS for all domains for development
 CORS(app)
-# Initialize SocketIO with eventlet async mode and logging
-# Initialize SocketIO with eventlet async mode
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', logger=False, engineio_logger=False)
 
-# Global camera instance
+# Global variables
 camera = None
 is_processing = False
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Initialize Voice Cloning Manager
+vc_manager = VoiceCloningManager(models_dir=os.path.join(backend_dir, "clone", "saved_models"))
+
+# Initialize TTS Manager
+tts_manager = TTSManager(
+    parrot_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "parrot_model.ckpt"), 
+    vocoder_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "vocoder_model.ckpt") 
+)
+
+# Voice profile storage
+active_voice_profile = {
+    'embedding': None,
+    'type': 'Natural',  # Natural, Professional, Warm, or Cloned
+    'auto_speak': True  # Auto-speak detected signs
+}
+voice_profiles_lock = threading.Lock()
+
 
 class VideoCamera(object):
     def __init__(self):
@@ -145,6 +181,13 @@ class VideoCamera(object):
                     if detected_text != "" and detected_text != self.last_emitted_text:
                         socketio.emit('text_update', {'text': detected_text})
                         self.last_emitted_text = detected_text
+                        
+                        # Auto-speak if enabled
+                        if active_voice_profile['auto_speak']:
+                            try:
+                                synthesize_and_emit_audio(detected_text)
+                            except Exception as e:
+                                print(f"Auto-speak error: {e}")
                         
             except Exception as e:
                 print(f"Detection worker Error: {e}")
@@ -425,32 +468,135 @@ def test_connect():
 def test_disconnect():
     print('Client disconnected')
 
+@socketio.on('request_speech')
+def handle_speech_request(data):
+    """Handle real-time speech synthesis request from client"""
+    text = data.get('text', '')
+    if text:
+        try:
+            synthesize_and_emit_audio(text)
+        except Exception as e:
+            socketio.emit('speech_error', {'error': str(e)})
+
+@socketio.on('toggle_auto_speak')
+def handle_toggle_auto_speak(data):
+    """Toggle automatic speech for detected signs"""
+    global active_voice_profile
+    with voice_profiles_lock:
+        active_voice_profile['auto_speak'] = data.get('enabled', True)
+    socketio.emit('auto_speak_status', {'enabled': active_voice_profile['auto_speak']})
+
+
+# --- Helper Functions ---
+
+def synthesize_and_emit_audio(text):
+    """
+    Synthesize speech and emit audio via SocketIO.
+    
+    Priority:
+    1. Cloned voice (if embedding available)
+    2. Voice profile with voice cloning models
+    3. Mock audio
+    """
+    try:
+        with voice_profiles_lock:
+            embedding = active_voice_profile['embedding']
+            voice_type = active_voice_profile['type']
+        
+        wav = None
+        synthesis_method = 'unknown'
+        
+        # Priority 1: Try cloned voice if embedding is available
+        if embedding:
+            print(f"Synthesizing with cloned voice: '{text}'")
+            try:
+                wav, error = vc_manager.synthesize(text, embedding)
+                if wav is not None and error is None:
+                    synthesis_method = 'cloned_voice'
+                    print(f"✓ Used cloned voice")
+                else:
+                    print(f"⚠ Cloned voice failed: {error}")
+            except Exception as e:
+                print(f"⚠ Cloned voice error: {e}")
+        
+        # Priority 2: Try voice profile with TTS manager
+        if wav is None:
+            print(f"Synthesizing with {voice_type} profile: '{text}'")
+            try:
+                speaker_id = {'Natural': 0, 'Professional': 1, 'Warm': 2}.get(voice_type, 0)
+                
+                # TTS manager will use voice cloning models with profile embeddings
+                # or fall back to mock audio if models not available
+                wav = tts_manager.synthesize(text, speaker_id=speaker_id)
+                
+                if wav is not None:
+                    # Check if it's mock audio or real synthesis
+                    if tts_manager.is_ready():
+                        synthesis_method = f'profile_{voice_type.lower()}'
+                        print(f"✓ Used {voice_type} profile with voice cloning")
+                    else:
+                        synthesis_method = 'mock_audio'
+                        print(f"⚠ Using mock audio (models not loaded)")
+                    
+                    # Convert int16 to float32 if needed
+                    if wav.dtype == np.int16:
+                        wav = wav.astype(np.float32) / 32768.0
+                else:
+                    print(f"✗ TTS manager returned None")
+                    
+            except Exception as e:
+                print(f"✗ TTS synthesis error: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Emit audio if we have it
+        if wav is not None:
+            try:
+                # Convert to bytes
+                buffer = io.BytesIO()
+                sr = 22050 if embedding else 24000
+                sf.write(buffer, wav, samplerate=sr, format='WAV')
+                buffer.seek(0)
+                audio_bytes = buffer.read()
+                
+                # Emit audio via SocketIO
+                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                socketio.emit('audio_ready', {
+                    'audio': audio_base64,
+                    'text': text,
+                    'voice_type': voice_type,
+                    'synthesis_method': synthesis_method,
+                    'sample_rate': sr
+                })
+                print(f"✓ Audio emitted: '{text}' ({synthesis_method})")
+                
+            except Exception as e:
+                print(f"✗ Error encoding/emitting audio: {e}")
+                socketio.emit('speech_error', {
+                    'error': f'Audio encoding failed: {str(e)}',
+                    'text': text
+                })
+        else:
+            print(f"✗ No audio generated for: '{text}'")
+            socketio.emit('speech_error', {
+                'error': 'Synthesis failed - no audio generated',
+                'text': text
+            })
+            
+    except Exception as e:
+        print(f"✗ Critical error in synthesize_and_emit_audio: {e}")
+        import traceback
+        traceback.print_exc()
+        socketio.emit('speech_error', {
+            'error': f'Synthesis failed: {str(e)}',
+            'text': text
+        })
+
 
 # ... (existing code for socketio setup)
 
-# --- Voice Cloning Integration ---
-import sys
-import os
-# Add 'clone' folder to path so 'encoder', 'synthesizer', etc. can be imported directly
-sys.path.append(os.path.join(os.path.dirname(__file__), 'clone'))
 
-from clone.voice_cloning import VoiceCloningManager
-from tts.tts_manager import TTSManager
-import io
-import soundfile as sf
-from flask import request, jsonify
-import numpy as np
-
-# Initialize Voice Cloning Manager
-# Expects models in 'backend/clone/saved_models/'
-backend_dir = os.path.dirname(os.path.abspath(__file__))
-vc_manager = VoiceCloningManager(models_dir=os.path.join(backend_dir, "clone", "saved_models"))
-
-# Initialize TTS Manager
-tts_manager = TTSManager(
-    parrot_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "parrot_model.ckpt"), 
-    vocoder_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "vocoder_model.ckpt") 
-)
+# --- Voice Cloning Routes ---
 
 @app.route('/clone_voice', methods=['POST'])
 def clone_voice():
@@ -520,15 +666,120 @@ def synthesize():
     
     return Response(buffer.read(), mimetype="audio/wav")
 
+@app.route('/set_voice_profile', methods=['POST'])
+def set_voice_profile():
+    """Set the active voice profile for sign language TTS"""
+    global active_voice_profile
+    data = request.json
+    
+    voice_type = data.get('voice_type', 'Natural')
+    embedding = data.get('embedding')
+    auto_speak = data.get('auto_speak', True)
+    
+    with voice_profiles_lock:
+        active_voice_profile['type'] = voice_type
+        active_voice_profile['embedding'] = embedding
+        active_voice_profile['auto_speak'] = auto_speak
+    
+    return jsonify({
+        'success': True,
+        'active_profile': {
+            'type': voice_type,
+            'has_cloned_voice': embedding is not None,
+            'auto_speak': auto_speak
+        }
+    })
+
+@app.route('/clone_and_activate_voice', methods=['POST'])
+def clone_and_activate_voice():
+    """Clone voice and immediately set it as active for sign language TTS"""
+    global active_voice_profile
+    
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+    
+    audio_file = request.files['audio']
+    
+    try:
+        temp_path = "temp_voice_input.wav"
+        audio_file.save(temp_path)
+        
+        # Clone the voice
+        result = vc_manager.clone_voice(temp_path)
+        
+        # Cleanup
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        if result.get('success'):
+            # Set as active voice
+            with voice_profiles_lock:
+                active_voice_profile['embedding'] = result['embedding']
+                active_voice_profile['type'] = 'Cloned'
+            
+            return jsonify({
+                'success': True,
+                'message': 'Voice cloned and activated successfully',
+                'is_mock': result.get('is_mock', False),
+                'active_profile': {
+                    'type': 'Cloned',
+                    'has_cloned_voice': True,
+                    'auto_speak': active_voice_profile['auto_speak']
+                }
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_voice_status', methods=['GET'])
+def get_voice_status():
+    """Get current voice profile status"""
+    with voice_profiles_lock:
+        return jsonify({
+            'active_profile': {
+                'type': active_voice_profile['type'],
+                'has_cloned_voice': active_voice_profile['embedding'] is not None,
+                'auto_speak': active_voice_profile['auto_speak']
+            },
+            'available_profiles': ['Natural', 'Professional', 'Warm', 'Cloned']
+        })
+
+@app.route('/get_tts_status', methods=['GET'])
+def get_tts_status():
+    """Get TTS system status"""
+    try:
+        vc_status = {
+            'encoder_loaded': vc_manager.encoder_loaded,
+            'synthesizer_loaded': vc_manager.synthesizer_loaded,
+            'vocoder_loaded': vc_manager.vocoder_loaded,
+            'ready': vc_manager.encoder_loaded and vc_manager.synthesizer_loaded and vc_manager.vocoder_loaded
+        }
+        
+        tts_status = tts_manager.get_status()
+        
+        return jsonify({
+            'voice_cloning': vc_status,
+            'tts_manager': tts_status,
+            'overall_ready': vc_status['ready'] or tts_status['ready']
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'voice_cloning': {'ready': False},
+            'tts_manager': {'ready': False},
+            'overall_ready': False
+        })
+
+
 # ... (existing routes)
 
 if __name__ == '__main__':
     try:
-        # Create directories if they don't exist
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        # Create required directories
         os.makedirs(os.path.join(backend_dir, 'clone', 'saved_models'), exist_ok=True)
         os.makedirs(os.path.join(backend_dir, 'video', 'model'), exist_ok=True)
-        # We need a tts/checkpoints dir too
         os.makedirs(os.path.join(backend_dir, 'tts', 'checkpoints'), exist_ok=True)
 
         print("Starting Flask Server...")

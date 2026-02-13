@@ -1,204 +1,221 @@
-
 import os
 import sys
 import torch
-import yaml
 import numpy as np
-import json
 from pathlib import Path
 
-# Adjust paths to ensure imports work
+# Add clone path for voice cloning TTS
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
-sys.path.append(os.path.join(current_dir, 'utils', 'aligner'))
-sys.path.append(os.path.join(current_dir, 'utils', 'vocoder'))
-
-# Import Parrot modules
-from modules.parrot import Parrot
-from modules.data import DFATokenizer, get_mask_from_lengths
-import lightning as L
-
-# Import Vocoder modules
-from utils.vocoder.models import CodeGenerator
-from utils.vocoder.utils import AttrDict
-
-# Import Aligner utils for text processing
-from utils.aligner.text import Tokenizer
-from utils.aligner.cleaners import english_cleaners
-
-class LitParrot(L.LightningModule):
-    def __init__(self, data_config, src_vocab_size, src_pad_idx):
-        super().__init__()
-        self.save_hyperparameters()
-        self.parrot = Parrot(data_config, src_vocab_size, src_pad_idx)
-    
-    def infer(self, batch):
-        self.eval()
-        return self.parrot.infer(batch)
+clone_dir = os.path.join(os.path.dirname(current_dir), 'clone')
+sys.path.insert(0, clone_dir)
 
 class TTSManager:
+    """
+    Unified TTS Manager that handles both voice cloning and profile-based synthesis.
+    Falls back gracefully when models are not available.
+    """
+    
     def __init__(self, 
-                 parrot_config_path=None, 
-                 parrot_checkpoint_path=None,
-                 vocoder_config_path=None,
+                 parrot_checkpoint_path=None, 
                  vocoder_checkpoint_path=None,
                  device=None):
         
         self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"TTSManager initializing on {self.device}...")
-
-        # Default paths if not provided
-        if not parrot_config_path:
-            parrot_config_path = os.path.join(current_dir, "config", "parrot_config.yaml") # Placeholder
-        if not vocoder_config_path:
-            vocoder_config_path = os.path.join(current_dir, "utils", "vocoder", "config.json")
-            
-        self.parrot_model = None
-        self.vocoder_model = None
-        self.tokenizer = None
-        self.vocoder_h = None
         
-        # Load Parrot
+        # Try to import voice cloning modules
+        self.voice_cloning_available = False
         try:
-            if parrot_checkpoint_path and os.path.exists(parrot_checkpoint_path):
-                print(f"Loading Parrot model from {parrot_checkpoint_path}")
-                # We need the alignment symbols to init tokenizer for Parrot
-                # Assuming symbols.pkl is in the same dir as config or hardcoded
-                # For now, we will wrap model loading in try-except
-                
-                # Load config
-                with open(parrot_config_path, "r") as f:
-                    self.parrot_config = yaml.load(f, Loader=yaml.FullLoader)
-                
-                # Setup Tokenizer
-                # The Parrot module uses DFATokenizer inside, but we need to tokenize raw text
-                # We need to reconstruct the Tokenizer manually
-                
-                alignment_path = Path(self.parrot_config["path"]["alignment_path"])
-                # We need to make sure this path exists or is relative
-                # For now let's assume we can load symbols
-                
-                self.dfa_tokenizer = DFATokenizer(alignment_path)
-                
-                # Load Model
-                self.parrot_model = LitParrot.load_from_checkpoint(
-                    parrot_checkpoint_path, 
-                    data_config=self.parrot_config,
-                    src_vocab_size=len(self.dfa_tokenizer),
-                    src_pad_idx=self.dfa_tokenizer.pad_idx,
-                    strict=False, # Often needed if keys mismatched slightly
-                    weights_only=True
-                ).to(self.device)
-                self.parrot_model.eval()
-                print("Parrot model loaded.")
+            from synthesizer.inference import Synthesizer
+            from vocoder import inference as vocoder
+            self.Synthesizer = Synthesizer
+            self.vocoder = vocoder
+            self.voice_cloning_available = True
+            print("✓ Voice cloning modules available")
+        except ImportError as e:
+            print(f"⚠ Voice cloning modules not available: {e}")
+        
+        # Initialize voice cloning models for profile-based TTS
+        self.synthesizer = None
+        self.vocoder_loaded = False
+        
+        # Speaker profiles with pre-generated embeddings (will be created if models available)
+        self.speaker_profiles = {
+            'Natural': None,
+            'Professional': None,
+            'Warm': None
+        }
+        
+        # Load models if available
+        self._load_models()
+    
+    def _load_models(self):
+        """Load voice cloning models for profile-based TTS"""
+        if not self.voice_cloning_available:
+            print("⚠ Skipping model loading - voice cloning modules not available")
+            return
+        
+        try:
+            # Try to load synthesizer
+            clone_models_dir = os.path.join(os.path.dirname(current_dir), 'clone', 'saved_models')
+            syn_path = os.path.join(clone_models_dir, 'synthesizer.pt')
+            voc_path = os.path.join(clone_models_dir, 'vocoder.pt')
+            
+            if os.path.exists(syn_path) and os.path.getsize(syn_path) > 1000:
+                print(f"Loading synthesizer from {syn_path}...")
+                self.synthesizer = self.Synthesizer(syn_path)
+                print("✓ Synthesizer loaded")
             else:
-                 print("Parrot checkpoint not found. TTS will fallback to mock.")
-        except Exception as e:
-            print(f"Error loading Parrot model: {e}")
-            self.parrot_model = None
-
-        # Load Vocoder
-        try:
-            if vocoder_checkpoint_path and os.path.exists(vocoder_checkpoint_path):
-                print(f"Loading Vocoder model from {vocoder_checkpoint_path}")
-                with open(vocoder_config_path) as f:
-                    data = f.read()
-                json_config = json.loads(data)
-                self.vocoder_h = AttrDict(json_config)
-                
-                self.vocoder_model = CodeGenerator(self.vocoder_h).to(self.device)
-                
-                state_dict_g = torch.load(vocoder_checkpoint_path, map_location=self.device)
-                self.vocoder_model.load_state_dict(state_dict_g['generator'])
-                self.vocoder_model.eval()
-                self.vocoder_model.remove_weight_norm()
-                print("Vocoder model loaded.")
+                print(f"⚠ Synthesizer not found at {syn_path}")
+            
+            if os.path.exists(voc_path) and os.path.getsize(voc_path) > 1000:
+                print(f"Loading vocoder from {voc_path}...")
+                self.vocoder.load_model(voc_path)
+                self.vocoder_loaded = True
+                print("✓ Vocoder loaded")
             else:
-                 print("Vocoder checkpoint not found.")
-
+                print(f"⚠ Vocoder not found at {voc_path}")
+            
+            # Generate default speaker embeddings if models loaded
+            if self.synthesizer and self.vocoder_loaded:
+                self._generate_default_embeddings()
+            
         except Exception as e:
-            print(f"Error loading Vocoder model: {e}")
-            self.vocoder_model = None
-
-    def preprocess_text(self, text):
-        # 1. Clean Text
-        cleaned_text = english_cleaners(text)
-        # 2. Convert to Phonemes?
-        # If the model was trained on characters, we just use characters.
-        # But 'Parrot' usually uses phonemes.
-        # DFATokenizer takes 'phoneme_seq' in its tokenize method.
-        # If we don't have a G2P, we might have to assume text is enough or space separated?
-        # The modules/data.py says: phones = self.tokenizer.tokenize(data_dict['characters'].split(' '))
-        # This implies input is space-separated phonemes/characters.
+            print(f"⚠ Error loading TTS models: {e}")
+            self.synthesizer = None
+            self.vocoder_loaded = False
+    
+    def _generate_default_embeddings(self):
+        """Generate default speaker embeddings for voice profiles"""
+        try:
+            # Create slightly different random embeddings for each profile
+            # In production, these would be from actual voice samples
+            np.random.seed(42)  # For consistency
+            
+            # Natural: neutral embedding
+            self.speaker_profiles['Natural'] = np.random.randn(256).astype(np.float32) * 0.05
+            
+            # Professional: slightly different
+            np.random.seed(43)
+            self.speaker_profiles['Professional'] = np.random.randn(256).astype(np.float32) * 0.05
+            
+            # Warm: slightly different
+            np.random.seed(44)
+            self.speaker_profiles['Warm'] = np.random.randn(256).astype(np.float32) * 0.05
+            
+            print("✓ Default speaker profiles generated")
+            
+        except Exception as e:
+            print(f"⚠ Error generating default embeddings: {e}")
+    
+    def synthesize(self, text, speaker_id=0, embedding=None):
+        """
+        Synthesize speech from text.
         
-        # For this implementation, we will assume character-based or simple whitespace split for now
-        # OR we try to tokenize simply by character if no G2P.
-        # If the user wants "strictly unique", we might need to integrate a G2P here.
+        Priority:
+        1. Use provided embedding (cloned voice)
+        2. Use speaker profile embedding
+        3. Fall back to mock audio
         
-        # Simple char breakdown for now to avoid G2P dependency crash
-        return cleaned_text
-
-    def synthesize(self, text, speaker_id=0):
-        if not self.parrot_model or not self.vocoder_model:
-            print("TTS Models missing, generating mock audio.")
-            return self.mock_audio(speaker_id=speaker_id)
+        Args:
+            text: Text to synthesize
+            speaker_id: Speaker ID (0=Natural, 1=Professional, 2=Warm)
+            embedding: Optional voice embedding from voice cloning
+            
+        Returns:
+            numpy array of audio samples (int16 or float32)
+        """
+        
+        # Map speaker_id to profile name
+        profile_names = ['Natural', 'Professional', 'Warm']
+        profile_name = profile_names[speaker_id] if 0 <= speaker_id < 3 else 'Natural'
+        
+        # Priority 1: Use provided embedding (cloned voice)
+        if embedding is not None:
+            return self._synthesize_with_embedding(text, embedding)
+        
+        # Priority 2: Use speaker profile embedding
+        if self.speaker_profiles.get(profile_name) is not None:
+            return self._synthesize_with_embedding(text, self.speaker_profiles[profile_name])
+        
+        # Priority 3: Fall back to mock audio
+        print(f"⚠ Using mock audio for '{profile_name}' profile")
+        return self._generate_mock_audio(speaker_id, text)
+    
+    def _synthesize_with_embedding(self, text, embedding):
+        """Synthesize using voice cloning with embedding"""
+        if not self.synthesizer or not self.vocoder_loaded:
+            print("⚠ Models not loaded, using mock audio")
+            return self._generate_mock_audio(0, text)
         
         try:
-            # 1. Text to Phones/Tokens
-            # Note: We need to match exactly how Parrot expects inputs.
-            # Assuming char-based for now as a fallback
+            # Ensure embedding is numpy array
+            if isinstance(embedding, list):
+                embedding = np.array(embedding, dtype=np.float32)
             
-            # TODO: Implement proper G2P
-            chars = list(self.preprocess_text(text)) 
-            # If tokenizer expects space separated:
-            # phones_seq = chars 
-            # phones = self.dfa_tokenizer.tokenize(phones_seq)
+            # Synthesize mel spectrogram
+            specs = self.synthesizer.synthesize_spectrograms([text], [embedding])
+            spec = specs[0]
             
-            # This part is highly dependent on the 'symbols.pkl' used during training.
-            # I will wrap this in try-except
+            # Generate waveform
+            wav = self.vocoder.infer_waveform(spec)
             
-            # Mocking tokenization for safety until symbols are confirmed
-            # phones = torch.tensor([1, 2, 3]).long().unsqueeze(0).to(self.device) 
+            # Normalize
+            wav = wav / (np.abs(wav).max() + 1e-8) * 0.95
             
-            # Placeholder until we read symbols
-            return self.mock_audio(speaker_id=speaker_id)
+            print(f"✓ Synthesized: '{text[:30]}...' ({len(wav)/self.synthesizer.sample_rate:.2f}s)")
             
-            # 2. Parrot Inference
-            # batch = {
-            #     'phones': phones,
-            #     'src_mask': get_mask_from_lengths([phones.shape[1]], device=self.device),
-            #     'speaker': torch.tensor([speaker_id]).long().to(self.device)
-            # }
-            # codes_list = self.parrot_model.infer(batch)[0] # List of ints
-            
-            # 3. Vocoder Inference
-            # codes = torch.LongTensor(codes_list).unsqueeze(0).to(self.device)
-            # code_dict = {'code': codes} # Adjust based on Vocoder input
-            # if self.vocoder_h.get('multispkr', None):
-            #      code_dict['spkr'] = torch.LongTensor([speaker_id]).to(self.device)
-            
-            # y_g_hat = self.vocoder_model(**code_dict)
-            # audio = y_g_hat.squeeze()
-            # audio = audio * 32768.0
-            # audio = audio.cpu().numpy().astype('int16')
-            
-            # return audio
+            return wav
             
         except Exception as e:
-            print(f"Synthesis failed: {e}")
-            return self.mock_audio(speaker_id=speaker_id)
-
-    def mock_audio(self, speaker_id=0):
-        # Generate a sine wave with varying pitch based on speaker_id
+            print(f"✗ Synthesis failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return self._generate_mock_audio(0, text)
+    
+    def _generate_mock_audio(self, speaker_id, text):
+        """Generate mock audio with varying characteristics based on speaker_id"""
         sample_rate = 24000
-        duration = 2.0
         
-        # Vary frequency: Natural (0) = 440Hz, Formal (1) = 380Hz, Casual (2) = 520Hz
-        freq = 440
-        if speaker_id == 1: freq = 380 
-        elif speaker_id == 2: freq = 520
+        # Duration based on text length (rough estimate: 10 chars per second)
+        duration = max(1.0, min(5.0, len(text) / 10.0))
+        
+        # Frequency varies by speaker
+        frequencies = {
+            0: 440,   # Natural - A4
+            1: 380,   # Professional - Lower
+            2: 520    # Warm - Higher
+        }
+        freq = frequencies.get(speaker_id, 440)
         
         t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        audio = 0.5 * np.sin(2 * np.pi * freq * t)
+        
+        # Create a more pleasant tone with harmonics
+        audio = 0.3 * np.sin(2 * np.pi * freq * t)  # Fundamental
+        audio += 0.15 * np.sin(2 * np.pi * freq * 2 * t)  # 2nd harmonic
+        audio += 0.075 * np.sin(2 * np.pi * freq * 3 * t)  # 3rd harmonic
+        
+        # Add fade in/out
+        fade_samples = int(sample_rate * 0.05)  # 50ms fade
+        fade_in = np.linspace(0, 1, fade_samples)
+        fade_out = np.linspace(1, 0, fade_samples)
+        
+        audio[:fade_samples] *= fade_in
+        audio[-fade_samples:] *= fade_out
+        
         return (audio * 32767).astype(np.int16)
-
+    
+    def is_ready(self):
+        """Check if TTS is ready for synthesis"""
+        return self.synthesizer is not None and self.vocoder_loaded
+    
+    def get_status(self):
+        """Get current TTS status"""
+        return {
+            'voice_cloning_available': self.voice_cloning_available,
+            'synthesizer_loaded': self.synthesizer is not None,
+            'vocoder_loaded': self.vocoder_loaded,
+            'ready': self.is_ready(),
+            'device': str(self.device),
+            'profiles_available': list(self.speaker_profiles.keys())
+        }
