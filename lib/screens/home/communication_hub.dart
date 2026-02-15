@@ -10,6 +10,9 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/emotion_indicator.dart';
 import '../../core/theme.dart';
+import '../../core/constants.dart';
+import '../../core/exceptions.dart';
+import '../../core/validators.dart';
 import '../../services/api_service.dart';
 import '../../widgets/waveform_visualizer.dart';
 
@@ -49,34 +52,29 @@ class _CommunicationHubState extends State<CommunicationHub> {
 
     _initSocket();
     
-    // Automatically start camera for testing
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _toggleCamera();
-    });
+    // Removed auto-start camera - user must manually start
   }
 
   void _initSocket() {
-    // For Desktop/Web 'http://127.0.0.1:5000' works better than localhost on Windows.
-    socket = IO.io('http://127.0.0.1:5000', <String, dynamic>{
+    socket = IO.io(AppConstants.baseUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });
 
     socket?.onConnect((_) {
-      print('Connected to Sign Language Backend');
+      debugPrint('Connected to Sign Language Backend');
     });
 
     socket?.on('text_update', (data) {
       if (data != null && data['text'] != null) {
         String newText = data['text'];
-        // Simple smoothing: only update if different
         if (AppState.translatedText.value != newText) {
              AppState.translatedText.value = newText;
         }
       }
     });
     
-    socket?.onDisconnect((_) => print('Disconnected'));
+    socket?.onDisconnect((_) => debugPrint('Disconnected'));
   }
 
   @override
@@ -84,6 +82,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
     _transcriptionController.dispose();
     socket?.dispose();
     _audioPlayer.dispose();
+    _apiService.dispose();
     _httpClient.close();
     _stopPolling();
     super.dispose();
@@ -105,7 +104,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
   void _startPolling() {
     _stopPolling(); // Ensure no duplicates
     _isPolling = true;
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 40), (timer) {
+    _pollingTimer = Timer.periodic(AppConstants.videoFramePollingInterval, (timer) {
       if (_isCameraActive && _isPolling && !_isFetchingFrame) {
         _fetchFrame();
       }
@@ -122,9 +121,13 @@ class _CommunicationHubState extends State<CommunicationHub> {
   Future<void> _fetchFrame() async {
     _isFetchingFrame = true;
     try {
-      // Use the video_frame endpoint which returns a single JPG
-      // Reusing _httpClient is much faster on Windows/Web
-      final response = await _httpClient.get(Uri.parse('http://127.0.0.1:5000/video_frame'));
+      final response = await _httpClient.get(
+        Uri.parse('${AppConstants.baseUrl}/video_frame')
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw NetworkException(ErrorMessages.networkError),
+      );
+      
       if (response.statusCode == 200) {
         if (mounted) {
           setState(() {
@@ -132,8 +135,10 @@ class _CommunicationHubState extends State<CommunicationHub> {
           });
         }
       }
+    } on NetworkException {
+      // Silently fail for network errors during polling
     } catch (e) {
-      // Don't spam console if connection failed once
+      // Don't spam console if connection failed
     } finally {
       _isFetchingFrame = false;
     }
@@ -142,9 +147,16 @@ class _CommunicationHubState extends State<CommunicationHub> {
   Future<void> _speakText() async {
     if (_isSpeaking) return;
     
-    final text = _transcriptionController.text;
-    if (text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nothing to speak!")));
+    final text = _transcriptionController.text.trim();
+    
+    // Validate text
+    final validationError = Validators.validateText(text);
+    if (validationError != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(validationError))
+        );
+      }
       return;
     }
 
@@ -152,38 +164,58 @@ class _CommunicationHubState extends State<CommunicationHub> {
     
     try {
       final embedding = AppState.voiceEmbedding.value;
-      if (embedding == null) {
-        if (mounted) {
-           showDialog(
-             context: context,
-             builder: (ctx) => AlertDialog(
-               title: const Text("Voice Required"),
-               content: const Text("Please create your custom voice identity in Voice Studio first."),
-               actions: [
-                 TextButton(
-                   onPressed: () => Navigator.of(ctx).pop(),
-                   child: const Text("OK"),
-                 ),
-               ],
-             ),
-           );
-        }
-        return;
+      
+      // Show message about voice type
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(embedding == null 
+              ? "Synthesizing with Natural voice..." 
+              : "Synthesizing with your voice..."),
+            duration: const Duration(seconds: 1),
+          ),
+        );
       }
       
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Synthesizing with YOUR voice..."), duration: Duration(seconds: 1)));
       final audioBytes = await _apiService.synthesizeSpeech(
         text, 
         embedding, 
         voiceProfile: AppState.currentVoiceProfile.value
       );
+      
       await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
 
+    } on ValidationException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.orange),
+        );
+      }
+    } on NetworkException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
+    } on ServerException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
     } catch (e) {
-      print("TTS Error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Speech Error: ${e.toString()}")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Speech Error: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() => _isSpeaking = false);
+      if (mounted) {
+        setState(() => _isSpeaking = false);
+      }
     }
   }
 
@@ -489,7 +521,7 @@ class _CommunicationHubState extends State<CommunicationHub> {
               }),
             ],
           ),
-          const SizedBox(height: 120), // Clearance for floating navbar
+          const SizedBox(height: AppConstants.bottomNavigationClearance), // Clearance for floating navbar
         ],
       ),
     );

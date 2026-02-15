@@ -61,7 +61,7 @@ tts_manager = TTSManager(
 active_voice_profile = {
     'embedding': None,
     'type': 'Natural',  # Natural, Professional, Warm, or Cloned
-    'auto_speak': True  # Auto-speak detected signs
+    'auto_speak': False  # Auto-speak disabled by default - only speak when button is clicked
 }
 voice_profiles_lock = threading.Lock()
 
@@ -132,7 +132,7 @@ class VideoCamera(object):
         """Persistent worker for detection to avoid thread spawn overhead"""
         while self.running:
             if not self.needs_processing or self.image_for_detection is None:
-                eventlet.sleep(0.01)
+                eventlet.sleep(0.005)  # Reduced from 0.01 for faster response
                 continue
                 
             try:
@@ -182,17 +182,22 @@ class VideoCamera(object):
                         socketio.emit('text_update', {'text': detected_text})
                         self.last_emitted_text = detected_text
                         
-                        # Auto-speak if enabled
+                        # Auto-speak if enabled (non-blocking)
                         if active_voice_profile['auto_speak']:
-                            try:
-                                synthesize_and_emit_audio(detected_text)
-                            except Exception as e:
-                                print(f"Auto-speak error: {e}")
+                            # Spawn in background to avoid blocking detection
+                            eventlet.spawn(self._async_speak, detected_text)
                         
             except Exception as e:
                 print(f"Detection worker Error: {e}")
             
-            eventlet.sleep(0.01)
+            eventlet.sleep(0.005)  # Reduced from 0.01 for faster response
+
+    def _async_speak(self, text):
+        """Asynchronously synthesize and emit audio without blocking detection"""
+        try:
+            synthesize_and_emit_audio(text)
+        except Exception as e:
+            print(f"Auto-speak error: {e}")
 
     def _trigger_detection(self, image):
         """Signal the worker to process the latest frame"""
@@ -229,7 +234,7 @@ class VideoCamera(object):
                     with self.lock:
                         self.frame = jpeg.tobytes()
                 
-                eventlet.sleep(0.02) # ~50 FPS target for capture
+                eventlet.sleep(0.016)  # ~60 FPS target for smoother capture
             except Exception as e:
                 print(f"Loop ERROR: {e}")
                 eventlet.sleep(0.1)

@@ -2,71 +2,154 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart'; // For MediaType
+import 'package:http_parser/http_parser.dart';
+import '../core/constants.dart';
+import '../core/exceptions.dart';
+import '../core/validators.dart';
 
 class ApiService {
-  // Use 10.0.2.2 for Android emulator, localhost for Windows/iOS simulator
-  // Since user is on Windows, localhost is fine for Windows build.
-  static const String baseUrl = 'http://127.0.0.1:5000';
+  static const String baseUrl = AppConstants.baseUrl;
+  final http.Client _client = http.Client();
 
-  Future<Map<String, dynamic>> cloneVoice(String filePath) async {
-    var uri = Uri.parse('$baseUrl/clone_voice');
-    var request = http.MultipartRequest('POST', uri);
+  // Clone voice with proper error handling
+  Future<Map<String, dynamic>> cloneVoice(String filePath, int fileSizeBytes) async {
+    // Validate file
+    final validationError = Validators.validateAudioFile(filePath, fileSizeBytes);
+    if (validationError != null) {
+      throw validationError;
+    }
+
+    final uri = Uri.parse('$baseUrl/clone_voice');
+    final request = http.MultipartRequest('POST', uri);
     
-    request.files.add(await http.MultipartFile.fromPath(
-      'audio',
-      filePath,
-      contentType: MediaType('audio', 'wav'), // Adjust if supporting others
-    ));
-
     try {
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
+      request.files.add(await http.MultipartFile.fromPath(
+        'audio',
+        filePath,
+        contentType: MediaType('audio', 'wav'),
+      ));
+
+      final streamedResponse = await request.send().timeout(
+        AppConstants.networkTimeout,
+        onTimeout: () {
+          throw NetworkException(ErrorMessages.networkError);
+        },
+      );
+      
+      final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        
+        // Validate response
+        if (data['success'] != true || data['embedding'] == null) {
+          throw ServerException(
+            ErrorMessages.cloningError,
+            details: data['error']?.toString(),
+          );
+        }
+        
+        return data;
+      } else if (response.statusCode >= 500) {
+        throw ServerException(
+          ErrorMessages.serverError,
+          statusCode: response.statusCode,
+        );
       } else {
-        throw Exception('Failed to clone voice: ${response.statusCode} ${response.body}');
+        final errorBody = _parseErrorBody(response.body);
+        throw ServerException(
+          errorBody ?? ErrorMessages.cloningError,
+          statusCode: response.statusCode,
+        );
       }
-    } catch (e) {
-      throw Exception('Error connecting to backend: $e');
+    } on SocketException {
+      throw NetworkException(ErrorMessages.networkError);
+    } on http.ClientException {
+      throw NetworkException(ErrorMessages.networkError);
+    } on FormatException {
+      throw ServerException('Invalid response from server');
     }
   }
 
-  Future<List<int>> synthesizeSpeech(String text, List<dynamic>? embedding, {String? voiceProfile}) async {
-    var uri = Uri.parse('$baseUrl/synthesize');
+  // Synthesize speech with proper error handling
+  Future<List<int>> synthesizeSpeech(
+    String text,
+    List<dynamic>? embedding, {
+    String? voiceProfile,
+  }) async {
+    // Validate text
+    final textError = Validators.validateText(text);
+    if (textError != null) {
+      throw ValidationException(textError);
+    }
+
+    // Sanitize text
+    final sanitizedText = Validators.sanitizeText(text);
+
+    final uri = Uri.parse('$baseUrl/synthesize');
     
     try {
       final Map<String, dynamic> body = {
-        'text': text,
+        'text': sanitizedText,
       };
+      
       if (embedding != null) {
+        if (!Validators.isValidEmbedding(embedding)) {
+          throw ValidationException('Invalid voice embedding');
+        }
         body['embedding'] = embedding;
       }
+      
       if (voiceProfile != null) {
         body['voice_profile'] = voiceProfile;
       }
 
-      var response = await http.post(
+      final response = await _client.post(
         uri,
         headers: {'Content-Type': 'application/json'},
         body: json.encode(body),
+      ).timeout(
+        AppConstants.networkTimeout,
+        onTimeout: () {
+          throw NetworkException(ErrorMessages.networkError);
+        },
       );
 
       if (response.statusCode == 200) {
         return response.bodyBytes;
+      } else if (response.statusCode >= 500) {
+        throw ServerException(
+          ErrorMessages.serverError,
+          statusCode: response.statusCode,
+        );
       } else {
-         // Try to parse error message
-         try {
-           final errorBody = json.decode(response.body);
-           print("Synthesis Error: ${errorBody['error']}");
-         } catch (_) {
-           print("Synthesis Error: ${response.body}");
-         }
-        throw Exception('Failed to synthesize speech: ${response.statusCode}');
+        final errorBody = _parseErrorBody(response.body);
+        throw ServerException(
+          errorBody ?? ErrorMessages.synthesisError,
+          statusCode: response.statusCode,
+        );
       }
-    } catch (e) {
-      throw Exception('Error connecting to backend: $e');
+    } on SocketException {
+      throw NetworkException(ErrorMessages.networkError);
+    } on http.ClientException {
+      throw NetworkException(ErrorMessages.networkError);
+    } on FormatException {
+      throw ServerException('Invalid response from server');
     }
+  }
+
+  // Parse error message from response body
+  String? _parseErrorBody(String body) {
+    try {
+      final errorData = json.decode(body);
+      return errorData['error']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Dispose resources
+  void dispose() {
+    _client.close();
   }
 }

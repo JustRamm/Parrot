@@ -5,6 +5,9 @@ import 'package:file_picker/file_picker.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/waveform_visualizer.dart';
 import '../../core/theme.dart';
+import '../../core/constants.dart';
+import '../../core/exceptions.dart';
+import '../../core/validators.dart';
 import '../../services/api_service.dart';
 
 class VoiceCreationWizard extends StatefulWidget {
@@ -18,6 +21,7 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
   int _currentStep = 0;
   String? _selectedFilePath;
   String? _selectedFileName;
+  int? _selectedFileSize;
   bool _isProcessing = false;
   final ApiService _apiService = ApiService();
 
@@ -40,35 +44,59 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.audio,
+        allowMultiple: false,
       );
 
-      if (result != null) {
+      if (result != null && result.files.single.path != null) {
+        final file = result.files.single;
+        final filePath = file.path!;
+        final fileSize = file.size;
+        
+        // Validate file
+        final validationError = Validators.validateAudioFile(filePath, fileSize);
+        if (validationError != null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(validationError.message),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        
         setState(() {
-          _selectedFilePath = result.files.single.path;
-          _selectedFileName = result.files.single.name;
+          _selectedFilePath = filePath;
+          _selectedFileName = file.name;
+          _selectedFileSize = fileSize;
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error picking file: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error selecting file: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
+
 
   void _generateVoice() async {
     setState(() => _isProcessing = true);
     AppState.voiceCreationProgress.value = 0.1;
 
     try {
-      // Step 1: Upload and Clone
-      AppState.voiceCreationProgress.value = 0.3;
-      
-      if (_selectedFilePath == null) {
-         // Fallback for simulation if they skipped/hacked (shouldn't happen with validation)
-         throw Exception("No voice file provided.");
+      if (_selectedFilePath == null || _selectedFileSize == null) {
+        throw ValidationException(ErrorMessages.invalidFileFormat);
       }
 
-      final result = await _apiService.cloneVoice(_selectedFilePath!);
+      AppState.voiceCreationProgress.value = 0.3;
+      
+      final result = await _apiService.cloneVoice(_selectedFilePath!, _selectedFileSize!);
       AppState.voiceCreationProgress.value = 0.7;
 
       if (result['success'] == true && result['embedding'] != null) {
@@ -80,19 +108,49 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Voice Identity Generated Successfully!")),
+            const SnackBar(content: Text(SuccessMessages.voiceCloned)),
           );
           context.go('/main');
         }
       } else {
-        throw Exception(result['error'] ?? "Unknown error from backend");
+        throw ServerException(result['error'] ?? ErrorMessages.cloningError);
       }
 
+    } on ValidationException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message), 
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } on NetworkException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message), 
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } on ServerException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message), 
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Cloning Failed: ${e.toString()}"), 
+            content: Text("Unexpected error: ${e.toString()}"), 
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),
