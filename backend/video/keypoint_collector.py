@@ -93,7 +93,10 @@ def main():
                 landmark_list = calc_landmark_list(debug_image, hand_landmarks)
                 pre_processed_landmark_list = pre_process_landmark(landmark_list)
 
-                logging_csv(number, mode, pre_processed_landmark_list)
+                if getattr(select_mode, "log_now", False):
+                    logging_csv(number, mode, pre_processed_landmark_list)
+                    select_mode.log_now = False
+
 
                 debug_image = draw_landmarks(debug_image, landmark_list)
                 debug_image = draw_info(debug_image, mode, number)
@@ -105,23 +108,44 @@ def main():
 
 
 def select_mode(key, mode):
+    # persistent buffer (survives between calls)
+    if not hasattr(select_mode, "buffer"):
+        select_mode.buffer = ""
+
     number = -1
-    if 48 <= key <= 57:  # 0 ~ 9
-        number = key - 48
-    if 97 <= key <= 105: # a ~ i (indices 10~18)
-        number = key - 97 + 10
-    
-    if key == 110:  # n
+    log_now = False
+
+    # digit keys 0–9
+    if 48 <= key <= 57:
+        select_mode.buffer += chr(key)
+        mode = 1
+
+    # backspace
+    elif key == 8:
+        select_mode.buffer = select_mode.buffer[:-1]
+
+    # ENTER → confirm number
+    elif key == 13:
+        if select_mode.buffer != "":
+            number = int(select_mode.buffer)
+            log_now = True
+            select_mode.buffer = ""
+
+    # cancel input
+    elif key == 110:  # n
         mode = 0
-    if key == 107:  # k (log)
+        select_mode.buffer = ""
+
+    # manual log mode toggle (kept from your original)
+    elif key == 107:  # k
         mode = 1
-    
-    # Auto-log if number pressed
-    if number != -1:
-        mode = 1
-    else:
-        # Reset to normal if no number key pressed, unless toggled? 
-        pass
+
+    # show currently typed number (without logging yet)
+    if select_mode.buffer != "":
+        number = int(select_mode.buffer)
+
+    # store log flag on the function so main loop can read it
+    select_mode.log_now = log_now
 
     return number, mode
 
