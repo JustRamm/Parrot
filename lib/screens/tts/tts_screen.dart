@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../../services/api_service.dart';
+import '../../services/tts_service.dart';
 import '../../providers/app_state.dart';
 import '../../widgets/waveform_visualizer.dart';
 
@@ -21,6 +22,12 @@ class _TTSScreenState extends State<TTSScreen> {
   
   final List<String> _messages = [];
   bool _isSpeaking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ttsService.init();
+  }
 
   @override
   void dispose() {
@@ -45,26 +52,49 @@ class _TTSScreenState extends State<TTSScreen> {
 
     try {
       final embedding = AppState.voiceEmbedding.value;
-      if (embedding == null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No custom voice found. Using standard voice.")));
-          }
+      final voiceProfile = AppState.currentVoiceProfile.value;
+
+      // Provide visual feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(embedding == null 
+              ? "Synthesizing with Natural voice..." 
+              : "Synthesizing with your voice..."),
+            duration: const Duration(seconds: 1),
+          ),
+        );
       }
 
-      // Synthesize
-      final audioBytes = await _apiService.synthesizeSpeech(
-        text, 
-        embedding, 
-        voiceProfile: AppState.currentVoiceProfile.value
-      );
-      
-      // Play
-      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
-      
-      // Listen for completion (simple delay approx or player state)
-      _audioPlayer.onPlayerComplete.first.then((_) {
-         if (mounted) setState(() => _isSpeaking = false);
-      });
+      if (voiceProfile == 'Natural' && embedding == null) {
+        // Use local browser/system TTS for the "Natural" profile
+        await ttsService.speak(text, pitch: 1.0, rate: 0.5);
+        
+        // Simulating completion for demo voice as local TTS doesn't always 
+        // give completion callback reliably on all web browsers
+        Future.delayed(Duration(milliseconds: 500 + (text.length * 80)), () {
+          if (mounted) setState(() => _isSpeaking = false);
+        });
+      } else {
+        if (embedding == null) {
+          // Standard voice fallback message already handled by SnackBar above
+        }
+
+        // Synthesize using backend API
+        final audioBytes = await _apiService.synthesizeSpeech(
+          text, 
+          embedding, 
+          voiceProfile: voiceProfile
+        );
+        
+        // Play
+        await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
+        
+        // Listen for completion
+        _audioPlayer.onPlayerComplete.first.then((_) {
+           if (mounted) setState(() => _isSpeaking = false);
+        });
+      }
 
     } catch (e) {
       if (mounted) {
@@ -90,27 +120,32 @@ class _TTSScreenState extends State<TTSScreen> {
                 letterSpacing: -0.5,
               ),
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.logoSage,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  "Cloned Voice Active",
-                  style: TextStyle(
-                    color: AppTheme.primaryDark.withOpacity(0.5),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            ValueListenableBuilder<bool>(
+              valueListenable: AppState.isVoiceGenerated,
+              builder: (context, isVoiceGenerated, child) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: isVoiceGenerated ? AppTheme.logoSage : Colors.grey,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isVoiceGenerated ? "Cloned Voice Active" : "Natural Voice Active",
+                      style: TextStyle(
+                        color: AppTheme.primaryDark.withOpacity(0.5),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -143,38 +178,32 @@ class _TTSScreenState extends State<TTSScreen> {
             ],
           ),
           
-          // Waveform Overlay when speaking
+          // Waveform Overlay when speaking - Moved to top under header
           if (_isSpeaking)
             Positioned(
-              bottom: 110,
+              top: 0,
               left: 0,
               right: 0,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
+                    color: Colors.white.withOpacity(0.9),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        "Speaking",
-                        style: TextStyle(
-                          color: AppTheme.logoSage,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
                       WaveformVisualizer(isAnimating: true, color: AppTheme.logoSage),
                     ],
                   ),

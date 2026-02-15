@@ -65,7 +65,8 @@ class Synthesizer:
         self._model.eval()
 
         if self.verbose:
-            print("Loaded synthesizer \"%s\" trained to step %d" % (self.model_fpath.name, self._model.state_dict()["step"]))
+            model_name = Path(self.model_fpath).name
+            print("Loaded synthesizer \"%s\" trained to step %d" % (model_name, self._model.state_dict()["step"]))
 
     def synthesize_spectrograms(self, texts: List[str],
                                 embeddings: Union[np.ndarray, List[np.ndarray]],

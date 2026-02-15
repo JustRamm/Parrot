@@ -14,6 +14,7 @@ import '../../core/constants.dart';
 import '../../core/exceptions.dart';
 import '../../core/validators.dart';
 import '../../services/api_service.dart';
+import '../../services/tts_service.dart';
 import '../../widgets/waveform_visualizer.dart';
 
 class CommunicationHub extends StatefulWidget {
@@ -51,6 +52,9 @@ class _CommunicationHubState extends State<CommunicationHub> {
     });
 
     _initSocket();
+    
+    // Initialize TTS for the demo voice
+    ttsService.init();
     
     // Removed auto-start camera - user must manually start
   }
@@ -176,14 +180,24 @@ class _CommunicationHubState extends State<CommunicationHub> {
           ),
         );
       }
+      final voiceProfile = AppState.currentVoiceProfile.value;
       
-      final audioBytes = await _apiService.synthesizeSpeech(
-        text, 
-        embedding, 
-        voiceProfile: AppState.currentVoiceProfile.value
-      );
-      
-      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
+      if (voiceProfile == 'Natural' && embedding == null) {
+        // Use local browser/system TTS for the "Natural" profile
+        // This gives the "guy in his 20s" feel without backend lag
+        await ttsService.speak(text, pitch: 1.0, rate: 0.5);
+        
+        // Simulating speaking duration for waveform animation
+        await Future.delayed(Duration(milliseconds: 500 + (text.length * 80)));
+      } else {
+        // Use backend API for cloned or advanced profiles
+        final audioBytes = await _apiService.synthesizeSpeech(
+          text, 
+          embedding, 
+          voiceProfile: voiceProfile
+        );
+        await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
+      }
 
     } on ValidationException catch (e) {
       if (mounted) {
