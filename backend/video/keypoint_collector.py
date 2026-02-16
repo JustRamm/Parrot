@@ -108,14 +108,16 @@ def main():
 
 
 def select_mode(key, mode):
-    # persistent buffer (survives between calls)
     if not hasattr(select_mode, "buffer"):
         select_mode.buffer = ""
+
+    if not hasattr(select_mode, "last_logged"):
+        select_mode.last_logged = -1
 
     number = -1
     log_now = False
 
-    # digit keys 0–9
+    # digit keys
     if 48 <= key <= 57:
         select_mode.buffer += chr(key)
         mode = 1
@@ -124,30 +126,36 @@ def select_mode(key, mode):
     elif key == 8:
         select_mode.buffer = select_mode.buffer[:-1]
 
-    # ENTER → confirm number
+    # ENTER
     elif key == 13:
         if select_mode.buffer != "":
             number = int(select_mode.buffer)
+            select_mode.last_logged = number
             log_now = True
             select_mode.buffer = ""
+
+        elif select_mode.last_logged != -1:
+            # 🚀 repeat last logged class
+            number = select_mode.last_logged
+            log_now = True
 
     # cancel input
     elif key == 110:  # n
         mode = 0
         select_mode.buffer = ""
 
-    # manual log mode toggle (kept from your original)
+    # manual log mode toggle (unchanged)
     elif key == 107:  # k
         mode = 1
 
-    # show currently typed number (without logging yet)
+    # live preview while typing
     if select_mode.buffer != "":
         number = int(select_mode.buffer)
 
-    # store log flag on the function so main loop can read it
     select_mode.log_now = log_now
 
     return number, mode
+
 
 
 def calc_landmark_list(image, landmarks):
@@ -179,14 +187,18 @@ def pre_process_landmark(landmark_list):
 
 
 def logging_csv(number, mode, landmark_list):
-    if mode == 0:
-        pass
-    if mode == 1 and (0 <= number <= 18):
-        csv_path = 'model/keypoint_classifier/keypoint.csv'
-        with open(csv_path, 'a', newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([number, *landmark_list])
-        print(f"Logged data for class {number}")
+    if number < 0:
+        return  # nothing to log
+
+    csv_path = 'model/keypoint_classifier/keypoint.csv'
+
+    with open(csv_path, 'a', newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([number, *landmark_list])
+
+    print(f"Logged data for class {number}")
+
+
 
 
 def draw_landmarks(image, landmark_point):
