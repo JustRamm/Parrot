@@ -1,8 +1,12 @@
-# Parrot 🦜
+# Parrot
+
+<p align="center">
+  <img src="assets/brand/logo.jpg" width="150" alt="Parrot Logo"/>
+</p>
 
 Parrot is a cutting-edge Flutter application designed to bridge the communication gap for individuals using sign language. It provides real-time, context-aware sign-to-speech translation with personalized voice cloning technology.
 
-## 🚀 Features
+##  Features
 
 - **Dynamic Sequence Recognition (V2)**: Uses **LSTM (Long Short-Term Memory)** neural networks to recognize not just static hand shapes, but fluid movements and sentences over time.
 - **Holistic Spatial Awareness**: Powered by **MediaPipe Holistic**, tracking hands, body pose, and facial landmarks simultaneously to distinguish between signs performed at different body locations.
@@ -24,7 +28,7 @@ Parrot is a cutting-edge Flutter application designed to bridge the communicatio
 
 ---
 
-## 📱 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -65,7 +69,7 @@ Parrot is a cutting-edge Flutter application designed to bridge the communicatio
 
 ---
 
-## 🎓 AI Model Training Guide (V2)
+## AI Model Training Guide (V2)
 
 Parrot V2 supports two types of recognition: **Static** (Single frame) and **Sequence** (Temporal movement). For complex words and sentences, use the **Sequence** workflow.
 
@@ -121,19 +125,15 @@ Parrot V2 supports two types of recognition: **Static** (Single frame) and **Seq
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 *   **`backend/`**:
     *   `server.py`: Main entry point with SocketIO streaming.
     *   `video/`: Holistic/LSTM recognition modules.
-    *   `clone/`: R    *   `DATASET_GUIDE.md`: Detailed guide on scaling the AI to "every word" using public eal-time voice cloning engine.
-datasets (WLASL).
+    *   `clone/`: Real-time voice cloning engine.
 *   **`lib/`**:
     *   `screens/home`: Real-time Hub for translation.
     *   `screens/voice_studio`: Interface for active voice cloning.
     *   `screens/learning`: Educational modules for ASL learners.
 
 ---
-
-## 🛡 License
-This project is part of a Final Year Research Project. All rights reserved.
