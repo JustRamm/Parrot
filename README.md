@@ -1,159 +1,139 @@
 # Parrot 🦜
 
-Parrot is a cutting-edge Flutter application designed to bridge the communication gap for individuals using sign language. It provides real-time gesture-to-speech translation with personalized voice cloning technology.
+Parrot is a cutting-edge Flutter application designed to bridge the communication gap for individuals using sign language. It provides real-time, context-aware sign-to-speech translation with personalized voice cloning technology.
 
 ## 🚀 Features
 
-- **Real-Time Translation**: Convert sign language gestures into text instantly using advanced computer vision.
-- **Voice Studio**: Create and manage personalized AI voice clones that sound just like the user.
-- **Voice Messenger**: A built-in Text-to-Speech tool for quick, typed communication.
-- **Emotion Detection**: Integrated emotion indicators that adjust based on gesture intensity and sentiment.
-- **Interactive HUD**: An editable transcription area that allows users to refine translated text before speaking it out.
+- **Dynamic Sequence Recognition (V2)**: Uses **LSTM (Long Short-Term Memory)** neural networks to recognize not just static hand shapes, but fluid movements and sentences over time.
+- **Holistic Spatial Awareness**: Powered by **MediaPipe Holistic**, tracking hands, body pose, and facial landmarks simultaneously to distinguish between signs performed at different body locations.
+- **Voice Studio**: Create and manage personalized AI voice clones that sound just like the user using Real-Time Voice Cloning.
+- **Bi-Manual Support**: Native support for two-handed signs, enabling a more natural and complete sign language vocabulary.
+- **Interactive HUD**: An editable transcription area that allows users to refine translated text before speaking it out via the cloned voice.
 - **Premium UI**: A sleek, dark-themed interface built with Flutter's latest Material 3 components and Lucide icons.
 
 ## 🛠 Tech Stack
 
 - **Frontend Framework**: [Flutter](https://flutter.dev) (Dart)
-- **State Management**: Flutter Riverpod & ValueNotifier
-- **Backend Framework**: Flask (Python) with Socket.IO
-- **AI/ML**:
-  - **Video Processing**: MediaPipe (Hand Tracking) + TensorFlow Lite (Gesture Classification)
-  - **Voice Cloning**: Real-Time Voice Cloning (Encoder/Synthesizer/Vocoder)
-  - **TTS**: Parrot/SYSPIN (Standard fallback)
+- **State Management**: Flutter Riverpod
+- **Backend Framework**: Flask (Python) with Socket.IO for real-time streaming.
+- **AI/ML Logic**:
+  - **Tracking**: MediaPipe Holistic (Pose + Hands + Face)
+  - **Classification**: TensorFlow Lite (LSTM for Sequences, Dense for Static Keypoints)
+  - **Voice Cloning**: Real-Time Voice Cloning (RTVC) with Encoder/Synthesizer/Vocoder architecture.
+  - **TTS**: Parrot/SYSPIN personalized synthesis.
+
+---
 
 ## 📱 Getting Started
 
 ### Prerequisites
 
 - **Flutter SDK** (Latest Stable)
-- **Python 3.8+**
-- **Git**
-
----
+- **Python 3.10+**
+- **MediaPipe & TensorFlow**
+- **CUDA/GPU** (Optional, highly recommended for real-time voice cloning)
 
 ### Step 1: Backend Setup
-
-The project requires a Python backend for video processing and voice cloning.
 
 1.  Navigate to the backend directory:
     ```bash
     cd backend
     ```
-
 2.  Install Python dependencies:
     ```bash
     pip install -r requirements.txt
     ```
-
-3.  Download required AI models (Voice Cloning):
+3.  Download required AI models:
     ```bash
     python download_models.py
     ```
-
 4.  Run the server:
     ```bash
     python server.py
     ```
-    The server listens on `http://127.0.0.1:5000` (or `0.0.0.0:5000`).
-
----
 
 ### Step 2: Application Setup
 
-1.  Open a new terminal in the root directory.
-2.  Install Flutter dependencies:
+1.  Intall Flutter dependencies:
     ```bash
     flutter pub get
     ```
-3.  Run the application:
+2.  Run the application:
     ```bash
     flutter run
     ```
 
 ---
 
-## 🎓 AI Communication Model Training Guide
+## 🎓 AI Model Training Guide (V2)
 
-Parrot is trained to recognize specific sign language gestures, but you can easily extend it to understand new words or adapt it to your unique hand movements.
+Parrot V2 supports two types of recognition: **Static** (Single frame) and **Sequence** (Temporal movement). For complex words and sentences, use the **Sequence** workflow.
 
-### **Step 1: Define Your Words**
-The system currently supports **19 gesture classes**. You can rename existing ones or retrain them entirely.
+### **Workflow A: Sequence Recognition Algorithm (The "New" Way)**
+*Ideal for dynamic signs, two-handed movements, and sentence-level recognition.*
 
-1.  Navigate to the file:
-    `backend/video/model/keypoint_classifier/keypoint_classifier_label.csv`
-2.  Open it in any text editor.
-3.  Each line represents a word class.
-    *   Line 1 corresponds to ID `0`
-    *   Line 2 corresponds to ID `1`
-    *   ...etc.
-4.  Change the text of the line you wish to train (e.g., change "Hello" to "Greetings").
+#### **Phase 1: Label Configuration**
+1.  Open `backend/video/model/keypoint_classifier/keypoint_classifier_label.csv`.
+2.  Add your new sign/word to the list. Note the index (e.g., Line 20 = ID 19).
 
-### **Step 2: Collect Training Data**
-You need to record examples of your hand signs so the AI can learn from them.
-
-1.  Open your terminal and navigate to the video backend:
+#### **Phase 2: Data Acquisition Algorithm**
+1.  Run the sequence collector:
     ```bash
-    cd backend/video
+    python backend/video/sequence_collector.py
     ```
-2.  Launch the data collector:
+2.  **Initialization**: The script initializes **MediaPipe Holistic** to track 543 total landmarks.
+3.  **Capturing**:
+    - Select your target class using keys `0-9` or `a-i`.
+    - **Hold 'K'** while performing the sign.
+    - **Step-by-Step Logic**: 
+        - The script captures a burst of **30 consecutive frames**.
+        - For each frame, it extracts 33 Pose landmarks, 21 Left Hand, and 21 Right Hand landmarks.
+        - Landmarks are flattened and concatenated into a 258-feature vector per frame.
+        - After 30 frames, the entire sequence (30x258) is saved as a `.npy` file in `backend/video/model/sequences/`.
+4.  **Variability**: Capture at least **30-50 sequences** per word from different angles and speeds to ensure model robustness.
+
+#### **Phase 3: Neural Network Training**
+1.  Run the LSTM trainer:
     ```bash
-    python keypoint_collector.py
+    python backend/video/train_sequence_classifier.py
     ```
-3.  **How to Record**:
-    *   **IDs 0-9**: Press keys **`0`** through **`9`** on your keyboard.
-    *   **IDs 10-18**: Press keys **`a`** through **`i`** on your keyboard.
-4.  **Process**:
-    *   Perform the gesture in front of the camera.
-    *   **Hold down** the corresponding key to log data frames.
-    *   Vary your hand position slightly (distance, angle) to make the model robust.
-    *   Aim for **100-300 samples** per gesture for high accuracy.
-5.  Press `q` to save and exit.
+2.  **Training Logic**:
+    - **Preprocessing**: Loads all `.npy` files and splits them into training (80%) and testing (20%) sets.
+    - **Architecture**: Builds a **Sequential LSTM Model** (64 units -> 32 units -> Dense -> Softmax).
+    - **Optimization**: Uses `Adam` optimizer and `SparseCategoricalCrossentropy` loss.
+    - **Export**: Once accuracy > 90%, it automatically converts the Keras model to `sequence_classifier.tflite`.
 
-### **Step 3: Train the Neural Network**
-This step processes your recorded data into a new AI model file.
+#### **Phase 4: Deployment**
+1.  Restart `python backend/server.py`.
+2.  The server automatically detects the new `.tflite` file and activates the **Temporal Detection Worker**.
 
-1.  In the same `backend/video` directory, run:
+### **Workflow B: Static Recognition (Hand Shapes)**
+*Best for alphabets or simple static gestures.*
+
+1.  **Collect Data**:
     ```bash
-    python train_classifier.py
+    python backend/video/keypoint_collector.py
     ```
-2.  The script will:
-    *   Load the dataset from `keypoint.csv`.
-    *   Train the model using TensorFlow.
-    *   Print the validation accuracy (aim for >90%).
-    *   Automatically export the new `keypoint_classifier.tflite` model.
-
-### **Step 4: Activate Changes**
-To see your new gestures in action:
-
-1.  Restart the backend server:
+2.  **Train Classifier**:
     ```bash
-    # Go back to backend root if needed
-    cd ..
-    python server.py
+    python backend/video/train_classifier.py
     ```
-2.  Restart the Flutter application to refresh the labels (if they were changed).
 
 ---
 
-## 📂 Backend Directory Structure
+## 📂 Project Structure
 
-*   **`server.py`**: Main Flask entry point. Handles WebSockets & API.
-*   **`video/`**: Sign Language detection modules.
-    *   `keypoint_collector.py`: Data collection tool.
-    *   `train_classifier.py`: Model training script.
-    *   `model/`: Stores `hand_landmarker.task` and `keypoint_classifier.tflite`.
-*   **`clone/`**: Real-Time Voice Cloning engine.
-    *   `voice_cloning.py`: Logic for loading and running RTVC.
-    *   `saved_models/`: Stores `encoder.pt`, `synthesizer.pt`, `vocoder.pt`.
-*   **`tts/`**: Standard TTS fallback system.
+*   **`backend/`**:
+    *   `server.py`: Main entry point with SocketIO streaming.
+    *   `video/`: Holistic/LSTM recognition modules.
+    *   `clone/`: R    *   `DATASET_GUIDE.md`: Detailed guide on scaling the AI to "every word" using public eal-time voice cloning engine.
+datasets (WLASL).
+*   **`lib/`**:
+    *   `screens/home`: Real-time Hub for translation.
+    *   `screens/voice_studio`: Interface for active voice cloning.
+    *   `screens/learning`: Educational modules for ASL learners.
 
-## 📱 Frontend Directory Structure
+---
 
-*   `lib/core`: Theme, Router, and Global Configs.
-*   `lib/screens/home`: Real-time translation hub (`CommunicationHub`).
-*   `lib/screens/voice_studio`: Voice library and creation (`VoiceCreationWizard`).
-*   `lib/screens/tts`: Text-to-Speech text input screen (`TTSScreen`).
-*   `lib/services`: `ApiService` for communicating with the backend.
-*   `lib/providers`: Global state (User voice, Translated text).
-
-
+## 🛡 License
+This project is part of a Final Year Research Project. All rights reserved.

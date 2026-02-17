@@ -27,11 +27,11 @@ import soundfile as sf
 
 # MediaPipe imports
 import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
+from collections import deque
 
 # Local imports - Video
 from video.model.keypoint_classifier.keypoint_classifier import KeyPointClassifier
+from video.model.keypoint_classifier.sequence_classifier import SequenceClassifier
 
 # Local imports - Voice Cloning
 sys.path.append(os.path.join(os.path.dirname(__file__), 'clone'))
@@ -85,22 +85,35 @@ class VideoCamera(object):
         self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
         self.cap.set(cv.CAP_PROP_FPS, 30)
         
-        # Load Model (Tasks API) - Updated Path to be absolute
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(script_dir, 'video', 'model', 'hand_landmarker.task')
-        base_options = python.BaseOptions(model_asset_path=model_path)
-        options = vision.HandLandmarkerOptions(base_options=base_options,
-                                               num_hands=2,
-                                               min_hand_detection_confidence=0.7,
-                                               min_hand_presence_confidence=0.5,
-                                               min_tracking_confidence=0.5)
-        self.detector = vision.HandLandmarker.create_from_options(options)
+        # Paths
+        # Use existing backend_dir
         
-        kf_model_path = os.path.join(script_dir, 'video', 'model', 'keypoint_classifier', 'keypoint_classifier.tflite')
+        # Load Keypoint Classifier (Static Signs)
+        kf_model_path = os.path.join(backend_dir, 'video', 'model', 'keypoint_classifier', 'keypoint_classifier.tflite')
         self.keypoint_classifier = KeyPointClassifier(model_path=kf_model_path)
         
-        # Load Labels - Updated Path to be absolute
-        labels_path = os.path.join(script_dir, 'video', 'model', 'keypoint_classifier', 'keypoint_classifier_label.csv')
+        # Load Sequence Classifier (Temporal Signs/Sentences)
+        seq_model_path = os.path.join(backend_dir, 'video', 'model', 'sequence_classifier.tflite')
+        if os.path.exists(seq_model_path):
+            self.sequence_classifier = SequenceClassifier(model_path=seq_model_path)
+        else:
+            self.sequence_classifier = None
+            print("⚠ Sequence classifier model not found. Run training first.")
+        
+        # Initialize Holistic
+        self.mp_holistic = mp.solutions.holistic
+        self.holistic = self.mp_holistic.Holistic(
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.5
+        )
+        
+        # Buffer for sequence prediction
+        self.sequence_buffer = deque(maxlen=30)
+        self.mp_drawing = mp.solutions.drawing_utils
+        self.show_overlay = True # Default to showing skeleton
+        
+        # Load Labels
+        labels_path = os.path.join(backend_dir, 'video', 'model', 'keypoint_classifier', 'keypoint_classifier_label.csv')
         with open(labels_path, encoding="utf-8-sig") as f:
             keypoint_classifier_labels = csv.reader(f)
             self.keypoint_classifier_labels = [row[0] for row in keypoint_classifier_labels]
@@ -115,10 +128,12 @@ class VideoCamera(object):
         # Detection state
         self.last_landmarks_data = None # Store (landmarks, handedness, label, brect)
         self.is_detecting = False
-        
-        # Detection state
-        self.last_landmarks_data = None # Store (landmarks, handedness, label, brect)
         self.needs_processing = False
+        self.frame_count = 0 # For frame skipping
+        
+        # Debouncing and Cooldown
+        self.last_prediction_time = 0
+        self.prediction_cooldown = 1.5 # Seconds between same word predictions
         
         self.t = threading.Thread(target=self.update, args=())
         self.t.daemon = True
@@ -127,6 +142,24 @@ class VideoCamera(object):
         # Single detection worker thread
         self.d_thread = threading.Thread(target=self.detection_worker, daemon=True)
         self.d_thread.start()
+
+    def extract_holistic_keypoints(self, results):
+        if results.pose_landmarks:
+            pose = np.array([[res.x, res.y, res.z, res.visibility] for res in results.pose_landmarks.landmark]).flatten()
+        else:
+            pose = np.zeros(33*4)
+            
+        if results.left_hand_landmarks:
+            lh = np.array([[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]).flatten()
+        else:
+            lh = np.zeros(21*3)
+            
+        if results.right_hand_landmarks:
+            rh = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten()
+        else:
+            rh = np.zeros(21*3)
+            
+        return np.concatenate([pose, lh, rh])
         
     def detection_worker(self):
         """Persistent worker for detection to avoid thread spawn overhead"""
@@ -139,43 +172,46 @@ class VideoCamera(object):
                 img = self.image_for_detection.copy()
                 self.needs_processing = False
                 
-                # Detection
+                # Detection using Holistic
                 rgb_image = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
-                detection_result = self.detector.detect(mp_image)
+                results = self.holistic.process(rgb_image)
                 
-                new_landmarks_data = []
+                # Extract keypoints for sequence classifier
+                keypoints = self.extract_holistic_keypoints(results)
+                
+                with self.lock:
+                    self.sequence_buffer.append(keypoints)
+                    buffer_copy = list(self.sequence_buffer) # Thread-safe snapshot
+                
+                new_landmarks_data = [] # For drawing
                 detected_text = ""
                 
-                if detection_result.hand_landmarks:
-                    for hand_landmarks, handedness in zip(detection_result.hand_landmarks, detection_result.handedness):
-                        brect = calc_bounding_rect(img, hand_landmarks)
-                        landmark_list = calc_landmark_list(img, hand_landmarks)
-                        
-                        # Classifier
-                        pre_processed_landmark_list = pre_process_landmark(landmark_list)
-                        hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
-                        
-                        if 0 <= hand_sign_id < len(self.keypoint_classifier_labels):
-                            label = self.keypoint_classifier_labels[hand_sign_id]
-                        else:
-                            label = "Unknown"
-                        
-                        if label == "_": label = ""
-                        
-                        new_landmarks_data.append({
-                            'landmarks': landmark_list,
-                            'handedness': handedness,
-                            'label': label,
-                            'brect': brect
-                        })
-                        
-                        if label != "":
-                            detected_text = label
+                # Sequence Prediction with Defensive Handling (Point 4)
+                if self.sequence_classifier and len(buffer_copy) == 30:
+                    try:
+                        res_id, confidence = self.sequence_classifier(buffer_copy)
+                        if confidence > 0.85:
+                            label = self.keypoint_classifier_labels[res_id]
+                            
+                            # Debouncing / Flicker Prevention (Point 2)
+                            import time
+                            current_time = time.time()
+                            if label != self.last_emitted_text or (current_time - self.last_prediction_time) > self.prediction_cooldown:
+                                detected_text = label
+                                self.last_prediction_time = current_time
+                    except Exception as e:
+                        print(f"Classification Inference Error: {e}")
+                
+                # Fallback to Static Hand Prediction for Drawing
+                if results.left_hand_landmarks:
+                    self._process_hand_for_drawing(img, results.left_hand_landmarks, "Left", new_landmarks_data)
+                if results.right_hand_landmarks:
+                    self._process_hand_for_drawing(img, results.right_hand_landmarks, "Right", new_landmarks_data)
                 
                 with self.lock:
                     self.last_landmarks_data = new_landmarks_data
                     self.text = detected_text
+                    self.last_holistic_results = results # Store results for drawing in update()
                     
                     # Emit only if changed
                     if detected_text != "" and detected_text != self.last_emitted_text:
@@ -191,6 +227,31 @@ class VideoCamera(object):
                 print(f"Detection worker Error: {e}")
             
             eventlet.sleep(0.005)  # Reduced from 0.01 for faster response
+
+    def _process_hand_for_drawing(self, img, landmarks, handedness_str, data_list):
+        brect = calc_bounding_rect(img, landmarks.landmark)
+        landmark_list = calc_landmark_list(img, landmarks.landmark)
+        
+        # Static classifier fallback
+        pre_processed_landmark_list = pre_process_landmark(landmark_list)
+        hand_sign_id = self.keypoint_classifier(pre_processed_landmark_list)
+        
+        label = "Unknown"
+        if 0 <= hand_sign_id < len(self.keypoint_classifier_labels):
+            label = self.keypoint_classifier_labels[hand_sign_id]
+            if label == "_": label = ""
+
+        # Construct a dummy handedness object for drawing compatibility
+        class DummyHand:
+            def __init__(self, name):
+                self.categories = [type('obj', (object,), {'category_name': name})]
+        
+        data_list.append({
+            'landmarks': landmark_list,
+            'handedness': DummyHand(handedness_str),
+            'label': label,
+            'brect': brect
+        })
 
     def _async_speak(self, text):
         """Asynchronously synthesize and emit audio without blocking detection"""
@@ -216,16 +277,23 @@ class VideoCamera(object):
                 
                 image = cv.flip(image, 1)
                 
-                # Signal detection worker
-                self._trigger_detection(image)
+                # Frame Skipping (Point 1): Only process every 2nd frame to reduce CPU load
+                self.frame_count += 1
+                if self.frame_count % 2 == 0:
+                    self._trigger_detection(image)
                 
                 # Draw landmarks and info
                 debug_image = image.copy()
                 with self.lock:
+                    # 1. Holistic "Ghost" Skeleton (New Feature)
+                    if self.show_overlay and hasattr(self, 'last_holistic_results'):
+                        self._draw_ghost_skeleton(debug_image, self.last_holistic_results)
+                    
+                    # 2. Classic Labels and Boxes
                     if self.last_landmarks_data:
                         for item in self.last_landmarks_data:
                             debug_image = draw_bounding_rect(True, debug_image, item['brect'])
-                            debug_image = draw_landmarks(debug_image, item['landmarks'])
+                            # debug_image = draw_landmarks(debug_image, item['landmarks'])
                             debug_image = draw_info_text(debug_image, item['brect'], item['handedness'], item['label'])
                 
                 # ret, jpeg = cv.imencode('.jpg', debug_image, [int(cv.IMWRITE_JPEG_QUALITY), 70])
@@ -238,6 +306,30 @@ class VideoCamera(object):
             except Exception as e:
                 print(f"Loop ERROR: {e}")
                 eventlet.sleep(0.1)
+
+    def _draw_ghost_skeleton(self, image, results):
+        """Draws premium neon skeleton lines for Pose and Hands."""
+        # Neon Blue for Pose
+        if results.pose_landmarks:
+            self.mp_drawing.draw_landmarks(
+                image, results.pose_landmarks, self.mp_holistic.POSE_CONNECTIONS,
+                self.mp_drawing.DrawingSpec(color=(255, 255, 0), thickness=2, circle_radius=1),
+                self.mp_drawing.DrawingSpec(color=(255, 200, 0), thickness=2, circle_radius=1)
+            )
+        # Neon Green for Left Hand
+        if results.left_hand_landmarks:
+            self.mp_drawing.draw_landmarks(
+                image, results.left_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS,
+                self.mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=2),
+                self.mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
+            )
+        # Neon Rose for Right Hand
+        if results.right_hand_landmarks:
+            self.mp_drawing.draw_landmarks(
+                image, results.right_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS,
+                self.mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
+                self.mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
+            )
         
     def __del__(self):
         self.running = False
@@ -250,8 +342,7 @@ class VideoCamera(object):
                  return None, None
             return self.frame, self.text
 
-
-# --- Helper Functions from app.py ---
+# --- Computer Vision Hub ---
 
 def calc_bounding_rect(image, landmarks):
     image_width, image_height = image.shape[1], image.shape[0]
@@ -491,6 +582,14 @@ def handle_toggle_auto_speak(data):
         active_voice_profile['auto_speak'] = data.get('enabled', True)
     socketio.emit('auto_speak_status', {'enabled': active_voice_profile['auto_speak']})
 
+@socketio.on('toggle_overlay')
+def handle_toggle_overlay(data):
+    """Toggle the skeleton/ghost overlay on the video feed"""
+    global camera
+    if camera:
+        camera.show_overlay = data.get('enabled', True)
+    socketio.emit('overlay_status', {'enabled': camera.show_overlay if camera else True})
+
 
 # --- Helper Functions ---
 
@@ -610,11 +709,13 @@ def clone_voice():
     
     audio_file = request.files['audio']
     
-    # Save to temp file to load with librosa/preprocess_wav
-    # Or load directly if utilities support it.
-    # Here we define a simplified flow:
+    # Preserve original extension to help librosa/audioread identify format
+    filename = audio_file.filename
+    ext = os.path.splitext(filename)[1] if filename else ".wav"
+    if not ext: ext = ".wav"
+    
     try:
-        temp_path = "temp_voice_input.wav"
+        temp_path = f"temp_voice_{os.urandom(4).hex()}{ext}"
         audio_file.save(temp_path)
         
         result = vc_manager.clone_voice(temp_path)
@@ -706,7 +807,12 @@ def clone_and_activate_voice():
     audio_file = request.files['audio']
     
     try:
-        temp_path = "temp_voice_input.wav"
+        # Preserve original extension
+        filename = audio_file.filename
+        ext = os.path.splitext(filename)[1] if filename else ".wav"
+        if not ext: ext = ".wav"
+        
+        temp_path = f"temp_active_voice_{os.urandom(4).hex()}{ext}"
         audio_file.save(temp_path)
         
         # Clone the voice
