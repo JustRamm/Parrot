@@ -19,6 +19,10 @@ import '../screens/settings/subscription_screen.dart';
 import '../screens/learning/practice_mode.dart';
 import '../screens/settings/terms_conditions_screen.dart';
 import '../screens/settings/privacy_policy_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/change_password_screen.dart';
+import '../screens/settings/account_deletion_screen.dart';
+import '../screens/settings/checkout_screen.dart';
 
 // Helper function for custom premium transitions
 Page<dynamic> _buildPageWithAnimation(Widget child, GoRouterState state) {
@@ -124,6 +128,31 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/privacy-policy',
       pageBuilder: (context, state) => _buildPageWithAnimation(const PrivacyPolicyScreen(), state),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      pageBuilder: (context, state) => _buildPageWithAnimation(const ForgotPasswordScreen(), state),
+    ),
+    GoRoute(
+      path: '/change-password',
+      pageBuilder: (context, state) => _buildPageWithAnimation(const ChangePasswordScreen(), state),
+    ),
+    GoRoute(
+      path: '/account-deletion',
+      pageBuilder: (context, state) => _buildPageWithAnimation(const AccountDeletionScreen(), state),
+    ),
+    GoRoute(
+      path: '/checkout',
+      pageBuilder: (context, state) {
+        final data = state.extra as Map<String, String>;
+        return _buildPageWithAnimation(
+          CheckoutScreen(
+            planTitle: data['planTitle']!,
+            planPrice: data['planPrice']!,
+          ),
+          state,
+        );
+      },
     ),
   ],
 );

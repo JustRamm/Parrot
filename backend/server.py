@@ -27,6 +27,13 @@ import soundfile as sf
 
 # MediaPipe imports
 import mediapipe as mp
+try:
+    import mediapipe.solutions.holistic as mp_holistic
+    import mediapipe.solutions.drawing_utils as mp_drawing
+except ImportError:
+    # Fallback for some non-standard 0.10.x builds
+    import mediapipe.python.solutions.holistic as mp_holistic
+    import mediapipe.python.solutions.drawing_utils as mp_drawing
 from collections import deque
 
 # Local imports - Video
@@ -70,20 +77,38 @@ class VideoCamera(object):
     def __init__(self):
         # Open camera with multiple backend attempts for Windows
         print("Initializing Camera (Backends: DSHOW, MSMF)...")
-        self.cap = cv.VideoCapture(0, cv.CAP_DSHOW)
-        if not self.cap.isOpened():
-             self.cap = cv.VideoCapture(0, cv.CAP_MSMF)
-        if not self.cap.isOpened():
-             self.cap = cv.VideoCapture(0)
+        self.cap = None
+        
+        # Try different indices and backends
+        for index in [0, 1, 2]:
+            for backend in [cv.CAP_DSHOW, cv.CAP_MSMF, None]:
+                try:
+                    print(f"Attempting to open camera {index} with backend {backend}...")
+                    if backend is not None:
+                        cap = cv.VideoCapture(index, backend)
+                    else:
+                        cap = cv.VideoCapture(index)
+                    
+                    if cap is not None and cap.isOpened():
+                        # Read a test frame to ensure it's actually working
+                        ret, _ = cap.read()
+                        if ret:
+                            self.cap = cap
+                            print(f"✓ Camera {index} successfully opened. Backend: {self.cap.getBackendName()}")
+                            break
+                        else:
+                            cap.release()
+                except Exception as e:
+                    print(f"  Attempt failed: {e}")
+            if self.cap: break
              
-        if not self.cap.isOpened():
-             print("CRITICAL: Could not open any video source.")
+        if not self.cap or not self.cap.isOpened():
+             print("CRITICAL: Could not open any video source. Using MOCK frame mode.")
+             self.cap = None
         else:
-             print(f"Camera successfully opened. Backend: {self.cap.getBackendName()}")
-
-        self.cap.set(cv.CAP_PROP_FRAME_WIDTH, 640) 
-        self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
-        self.cap.set(cv.CAP_PROP_FPS, 30)
+            self.cap.set(cv.CAP_PROP_FRAME_WIDTH, 640) 
+            self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
+            self.cap.set(cv.CAP_PROP_FPS, 30)
         
         # Paths
         # Use existing backend_dir
@@ -101,7 +126,7 @@ class VideoCamera(object):
             print("⚠ Sequence classifier model not found. Run training first.")
         
         # Initialize Holistic
-        self.mp_holistic = mp.solutions.holistic
+        self.mp_holistic = mp_holistic
         self.holistic = self.mp_holistic.Holistic(
             min_detection_confidence=0.7,
             min_tracking_confidence=0.5
@@ -109,7 +134,7 @@ class VideoCamera(object):
         
         # Buffer for sequence prediction
         self.sequence_buffer = deque(maxlen=30)
-        self.mp_drawing = mp.solutions.drawing_utils
+        self.mp_drawing = mp_drawing
         self.show_overlay = True # Default to showing skeleton
         
         # Load Labels
@@ -270,12 +295,16 @@ class VideoCamera(object):
         print("Starting video capture loop with detection...")
         while self.running:
             try:
-                ret, image = self.cap.read()
-                if not ret:
-                    eventlet.sleep(0.1)
-                    continue
-                
-                image = cv.flip(image, 1)
+                if self.cap:
+                    ret, image = self.cap.read()
+                    if not ret:
+                        eventlet.sleep(0.1)
+                        continue
+                    image = cv.flip(image, 1)
+                else:
+                    # Mock frame mode (Point 5)
+                    image = self._generate_mock_frame()
+                    eventlet.sleep(0.05) # Slower mock loop
                 
                 # Frame Skipping (Point 1): Only process every 2nd frame to reduce CPU load
                 self.frame_count += 1
@@ -296,7 +325,7 @@ class VideoCamera(object):
                             # debug_image = draw_landmarks(debug_image, item['landmarks'])
                             debug_image = draw_info_text(debug_image, item['brect'], item['handedness'], item['label'])
                 
-                # ret, jpeg = cv.imencode('.jpg', debug_image, [int(cv.IMWRITE_JPEG_QUALITY), 70])
+                # Encode and store frame
                 ret, jpeg = cv.imencode('.jpg', debug_image, [int(cv.IMWRITE_JPEG_QUALITY), 50])
                 if ret:
                     with self.lock:
@@ -331,6 +360,20 @@ class VideoCamera(object):
                 self.mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
             )
         
+    def _generate_mock_frame(self):
+        """Generates a black frame with 'System Error: Camera Not Found' text."""
+        img = np.zeros((480, 640, 3), np.uint8)
+        cv.putText(img, "PARROT: CAMERA ERROR", (160, 220), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        cv.putText(img, "Could not open video source (Index 0,1,2)", (130, 260), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv.putText(img, "Check permissions or hardware connection", (140, 290), cv.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+        
+        # Add a scanning line for a "live" feel even in mock mode
+        import time
+        line_y = int((time.time() * 100) % 480)
+        cv.line(img, (0, line_y), (640, line_y), (0, 0, 100), 1)
+        
+        return img
+
     def __del__(self):
         self.running = False
         if self.cap.isOpened():
@@ -546,10 +589,21 @@ def video_feed():
 def video_frame():
     global camera
     if camera is None:
-        camera = VideoCamera()
+        try:
+            camera = VideoCamera()
+        except Exception as e:
+            print(f"Failed to initialize VideoCamera: {e}")
+            return jsonify({"error": str(e)}), 500
+            
     frame, _ = camera.get_frame()
     if frame is None:
-        return "", 500
+        # Use a very short delay to allow the update thread a chance to capture
+        eventlet.sleep(0.2)
+        frame, _ = camera.get_frame()
+        
+    if frame is None:
+        # 204 No Content is better for polling; tells frontend to just try again
+        return "", 204
     return Response(frame, mimetype='image/jpeg')
 
 @app.route('/')

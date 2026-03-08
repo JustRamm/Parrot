@@ -75,7 +75,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () {},
+            onPressed: () => context.push('/forgot-password'),
             child: const Text("Forgot Password?", style: TextStyle(color: AppTheme.logoSage, fontWeight: FontWeight.w600)),
           ),
         ),

@@ -56,7 +56,24 @@ class _CommunicationHubState extends State<CommunicationHub> {
     // Initialize TTS for the demo voice
     ttsService.init();
     
+    // Sync active voice from backend
+    _syncVoiceStatus();
+    
     // Removed auto-start camera - user must manually start
+  }
+
+  Future<void> _syncVoiceStatus() async {
+    try {
+      final status = await _apiService.getVoiceStatus();
+      if (status['active_profile'] != null) {
+        final profile = status['active_profile'];
+        AppState.currentVoiceProfile.value = profile['type'] ?? 'Natural';
+        // If the backend says it has a cloned voice but we don't have the embedding, 
+        // we might want to fetch it, but for now just syncing the type is good.
+      }
+    } catch (e) {
+      debugPrint("Voice status sync error: $e");
+    }
   }
 
   void _initSocket() {

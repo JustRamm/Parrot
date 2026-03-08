@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 
 class SubscriptionScreen extends StatelessWidget {
@@ -165,7 +166,10 @@ class SubscriptionScreen extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: isCurrent ? null : () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Mock Payment Gateway Initiated")));
+                      context.push('/checkout', extra: {
+                        'planTitle': title,
+                        'planPrice': price,
+                      });
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isPopular ? AppTheme.logoSage : Colors.grey.shade100,

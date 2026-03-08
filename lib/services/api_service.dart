@@ -138,6 +138,52 @@ class ApiService {
     }
   }
 
+  // Set the active voice profile on the backend
+  Future<Map<String, dynamic>> setVoiceProfile({
+    required String voiceType,
+    List<dynamic>? embedding,
+    bool autoSpeak = true,
+  }) async {
+    final uri = Uri.parse('$baseUrl/set_voice_profile');
+    
+    try {
+      final response = await _client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'voice_type': voiceType,
+          'embedding': embedding,
+          'auto_speak': autoSpeak,
+        }),
+      ).timeout(AppConstants.networkTimeout);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw ServerException('Failed to set voice profile');
+      }
+    } catch (e) {
+      throw NetworkException(ErrorMessages.networkError);
+    }
+  }
+
+  // Get current voice status from backend
+  Future<Map<String, dynamic>> getVoiceStatus() async {
+    final uri = Uri.parse('$baseUrl/get_voice_status');
+    
+    try {
+      final response = await _client.get(uri).timeout(AppConstants.networkTimeout);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw ServerException('Failed to get voice status');
+      }
+    } catch (e) {
+      throw NetworkException(ErrorMessages.networkError);
+    }
+  }
+
   // Parse error message from response body
   String? _parseErrorBody(String body) {
     try {

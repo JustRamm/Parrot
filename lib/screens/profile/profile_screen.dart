@@ -89,10 +89,10 @@ class ProfileScreen extends StatelessWidget {
             _buildMenuItem(context, LucideIcons.userCheck, "Account Details", onTap: () => context.push('/account-settings')),
             _buildMenuItem(context, LucideIcons.history, "Translation History", onTap: () => context.push('/history')),
             _buildMenuItem(context, LucideIcons.globe, "Language & Region", onTap: () => context.push('/settings/language')),
-            _buildMenuItem(context, LucideIcons.eye, "Accessibility", onTap: () => context.push('/settings/accessibility')),
             _buildMenuItem(context, LucideIcons.lock, "Privacy & Security", onTap: () => context.push('/settings/privacy')),
-             _buildMenuItem(context, LucideIcons.creditCard, "Subscription", onTap: () => context.push('/subscription')),
-             _buildMenuItem(context, LucideIcons.helpCircle, "Help & Support", onTap: () => context.push('/settings/help')),
+            _buildMenuItem(context, LucideIcons.shield, "Privacy Policy", onTap: () => context.push('/settings/privacy-policy')),
+            _buildMenuItem(context, LucideIcons.creditCard, "Subscription", onTap: () => context.push('/settings/subscription')),
+            _buildMenuItem(context, LucideIcons.helpCircle, "Help & Support", onTap: () => context.push('/settings/help')),
             
             const SizedBox(height: 32),
             Padding(
@@ -101,6 +101,9 @@ class ProfileScreen extends StatelessWidget {
                 width: double.infinity,
                 child: TextButton(
                   onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Camera flipped (Front/Back)")),
+                    );
                     // Navigate back to auth screen on logout
                     context.go('/auth');
                   },
