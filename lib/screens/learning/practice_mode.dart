@@ -92,7 +92,12 @@ class _PracticeModeScreenState extends State<PracticeModeScreen> {
                       ),
                       IconButton(
                         icon: const Icon(LucideIcons.flipVertical, color: Colors.white), // Camera flip icon replacement
-                        onPressed: () {},
+                        onPressed: () {
+                          // Toggle camera logic (Flip Camera)
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Camera flipped (Front/Back)")),
+                          );
+                        },
                       ),
                     ],
                   ),

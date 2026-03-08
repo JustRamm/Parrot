@@ -64,7 +64,12 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
     AppState.currentVoiceId.value = voice['id'];
     AppState.currentVoiceProfile.value = voice['type']!;
     
-    // In a real app, you'd also load the specific embedding for this voice here
+    // Notify backend about active voice profile
+    _apiService.setVoiceProfile(
+      voiceType: voice['type']!,
+      embedding: voice['type'] == 'Cloned' ? AppState.voiceEmbedding.value : null,
+      autoSpeak: true,
+    ).catchError((e) => debugPrint("Error syncing voice profile: $e"));
   }
 
   @override

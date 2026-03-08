@@ -17,7 +17,7 @@ class HelpSupportScreen extends StatelessWidget {
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.primaryDark),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SingleChildScrollView(
@@ -40,9 +40,15 @@ class HelpSupportScreen extends StatelessWidget {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primaryDark),
             ),
             const SizedBox(height: 16),
-            _buildActionItem(context, LucideIcons.mail, "Email Support", "support@parrotapp.com"),
-            _buildActionItem(context, LucideIcons.globe, "Website", "www.parrotapp.com"),
-            _buildActionItem(context, LucideIcons.twitter, "Twitter", "@parrotapp"),
+            _buildActionItem(context, LucideIcons.mail, "Email Support", "support@parrotapp.com", onTap: () {
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Email client opening...")));
+            }),
+            _buildActionItem(context, LucideIcons.globe, "Website", "www.parrotapp.com", onTap: () {
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Opening parrotapp.com...")));
+            }),
+            _buildActionItem(context, LucideIcons.twitter, "Twitter", "@parrotapp", onTap: () {
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Opening Twitter/X...")));
+            }),
 
             const SizedBox(height: 32),
             const Text(
@@ -51,7 +57,7 @@ class HelpSupportScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _buildActionItem(context, LucideIcons.fileText, "Terms of Service", "Read terms", onTap: () => context.push('/settings/terms')),
-            _buildActionItem(context, LucideIcons.shield, "Privacy Policy", "Read policy", onTap: () => context.push('/settings/privacy')),
+            _buildActionItem(context, LucideIcons.shield, "Privacy Policy", "Read policy", onTap: () => context.push('/settings/privacy-policy')),
           ],
         ),
       ),

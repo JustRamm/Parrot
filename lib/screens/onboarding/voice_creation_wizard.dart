@@ -146,8 +146,16 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
       if (result['success'] == true && result['embedding'] != null) {
         AppState.voiceEmbedding.value = result['embedding'];
         AppState.currentVoiceId.value = "custom_${DateTime.now().millisecondsSinceEpoch}";
+        AppState.currentVoiceProfile.value = "Cloned"; // Set active profile
         AppState.isVoiceGenerated.value = true;
         AppState.voiceCreationProgress.value = 1.0;
+        
+        // Activate on backend so auto-speak uses it
+        await _apiService.setVoiceProfile(
+          voiceType: 'Cloned',
+          embedding: result['embedding'],
+          autoSpeak: true,
+        );
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 
 class PrivacySettingsScreen extends StatefulWidget {
   const PrivacySettingsScreen({super.key});
@@ -31,14 +32,18 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               "Change Password",
               "Update your login credentials.",
               LucideIcons.lock,
-              () {},
+              () => context.push('/change-password'),
             ),
             const SizedBox(height: 16),
             _buildActionTile(
               "Two-Factor Authentication",
               "Add an extra layer of security.",
               LucideIcons.shieldCheck,
-              () {},
+              () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Two-factor authentication setup coming soon.")),
+                );
+              },
             ),
 
             const SizedBox(height: 32),
@@ -58,13 +63,9 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
               (val) => setState(() => _voiceDataSharing = val),
             ),
             
-            const SizedBox(height: 48),
             Center(
               child: TextButton(
-                onPressed: () {
-                   // Delete account logic
-                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Account deletion request sent.")));
-                },
+                onPressed: () => context.push('/account-deletion'),
                 child: const Text("Delete Account Permanently", style: TextStyle(color: AppTheme.logoBerry, fontWeight: FontWeight.bold)),
               ),
             )

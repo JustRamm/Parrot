@@ -56,7 +56,24 @@ class _CommunicationHubState extends State<CommunicationHub> {
     // Initialize TTS for the demo voice
     ttsService.init();
     
+    // Sync active voice from backend
+    _syncVoiceStatus();
+    
     // Removed auto-start camera - user must manually start
+  }
+
+  Future<void> _syncVoiceStatus() async {
+    try {
+      final status = await _apiService.getVoiceStatus();
+      if (status['active_profile'] != null) {
+        final profile = status['active_profile'];
+        AppState.currentVoiceProfile.value = profile['type'] ?? 'Natural';
+        // If the backend says it has a cloned voice but we don't have the embedding, 
+        // we might want to fetch it, but for now just syncing the type is good.
+      }
+    } catch (e) {
+      debugPrint("Voice status sync error: $e");
+    }
   }
 
   void _initSocket() {
@@ -71,9 +88,32 @@ class _CommunicationHubState extends State<CommunicationHub> {
 
     socket?.on('text_update', (data) {
       if (data != null && data['text'] != null) {
-        String newText = data['text'];
-        if (AppState.translatedText.value != newText) {
-             AppState.translatedText.value = newText;
+        String word = data['text'].toString().trim();
+        if (word.isEmpty || word == "_") return;
+        
+        String current = AppState.translatedText.value.trim();
+        
+        // Logical Appending:
+        // If the new word is different from the last word added, append it
+        List<String> words = current.split(" ");
+        if (words.isEmpty || words.last.toUpperCase() != word.toUpperCase()) {
+            String updated = current.isEmpty ? word : "$current $word";
+            
+            // Limit log size to last 500 chars to keep it clean
+            if (updated.length > 500) {
+              updated = "...${updated.substring(updated.length - 490)}";
+            }
+            
+            AppState.translatedText.value = updated;
+            
+            // Auto-scroll to end of text field
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                _transcriptionController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _transcriptionController.text.length)
+                );
+              }
+            });
         }
       }
     });
