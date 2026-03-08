@@ -8,7 +8,7 @@ class AppState {
   static final ValueNotifier<double> voiceCreationProgress = ValueNotifier(0.0);
   static final ValueNotifier<bool> isVoiceGenerated = ValueNotifier(false);
   static final ValueNotifier<bool> isRecording = ValueNotifier(false);
-  static final ValueNotifier<String> translatedText = ValueNotifier("Gesture detected: Hello! How are you?");
+  static final ValueNotifier<String> translatedText = ValueNotifier("");
   static final ValueNotifier<double> emotionIntensity = ValueNotifier(0.2);
   
   // Voice Cloning State
