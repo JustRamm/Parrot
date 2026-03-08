@@ -20,7 +20,7 @@ matplotlib
 gdown
 inflect
 tensorboard
-webrtcvad
+webrtcvad-wheels==2.0.14
 soundfile
 scipy
 scikit-learn
