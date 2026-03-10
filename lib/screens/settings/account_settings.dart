@@ -1,20 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
+import '../../auth/auth_controller.dart';
 
-class AccountSettingsScreen extends StatefulWidget {
+class AccountSettingsScreen extends ConsumerStatefulWidget {
   const AccountSettingsScreen({super.key});
 
   @override
-  State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
+  ConsumerState<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
 }
 
-class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
-  final TextEditingController _nameController = TextEditingController(text: "John Doe");
-  final TextEditingController _emailController = TextEditingController(text: "john.doe@example.com");
+class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _emailController;
   bool _emailNotifications = true;
   bool _pushNotifications = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final authState = ref.read(authControllerProvider);
+    final user = authState.user;
+
+    final metadata = user?.userMetadata ?? const <String, dynamic>{};
+    final firstName = (metadata['first_name'] as String?)?.trim();
+    final lastName = (metadata['last_name'] as String?)?.trim();
+    final fullName = [
+      if (firstName != null && firstName.isNotEmpty) firstName,
+      if (lastName != null && lastName.isNotEmpty) lastName,
+    ].join(' ').trim();
+
+    _nameController = TextEditingController(
+      text: fullName.isNotEmpty ? fullName : (user?.email ?? ''),
+    );
+    _emailController = TextEditingController(text: user?.email ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
