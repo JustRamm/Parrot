@@ -28,6 +28,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _signupPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  bool _pwHasMinLength = false;
+  bool _pwHasUppercase = false;
+  bool _pwHasNumber = false;
+  bool _pwHasSpecial = false;
+
   @override
   void dispose() {
     _loginEmailController.dispose();
@@ -129,7 +134,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           LucideIcons.lock,
           controller: _loginPasswordController,
           obscure: true,
-          validator: _validatePassword,
+          validator: _validateLoginPassword,
         ),
         const SizedBox(height: 16),
         Align(
@@ -229,8 +234,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           LucideIcons.lock,
           controller: _signupPasswordController,
           obscure: true,
-          validator: _validatePassword,
+          validator: _validateSignupPassword,
+          onChanged: _onSignupPasswordChanged,
         ),
+        const SizedBox(height: 12),
+        _buildPasswordRequirements(),
         const SizedBox(height: 16),
         _buildTextField(
           "Confirm Password",
@@ -256,7 +264,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             );
             if (!mounted) return;
             if (result.success) {
-              context.go('/main');
+              setState(() {
+                isLogin = true;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Account created. Please sign in to continue.'),
+                ),
+              );
             }
           },
         ),
@@ -296,6 +311,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     TextEditingController? controller,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    ValueChanged<String>? onChanged,
     bool obscure = false,
   }) {
     return Container(
@@ -315,6 +331,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         keyboardType: keyboardType,
         obscureText: obscure,
         validator: validator,
+        onChanged: onChanged,
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
@@ -402,13 +419,33 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     return null;
   }
 
-  String? _validatePassword(String? value) {
+  String? _validateLoginPassword(String? value) {
     final password = value ?? '';
     if (password.isEmpty) {
       return 'Please enter your password.';
     }
     if (password.length < 8) {
       return 'Password must be at least 8 characters.';
+    }
+    return null;
+  }
+
+  String? _validateSignupPassword(String? value) {
+    final password = value ?? '';
+    if (password.isEmpty) {
+      return 'Please enter your password.';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return 'Password must contain at least one uppercase letter.';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(password)) {
+      return 'Password must contain at least one number.';
+    }
+    if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(password)) {
+      return 'Password must contain at least one special character.';
     }
     return null;
   }
@@ -422,5 +459,50 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       return 'Passwords do not match.';
     }
     return null;
+  }
+
+  void _onSignupPasswordChanged(String value) {
+    setState(() {
+      _pwHasMinLength = value.length >= 8;
+      _pwHasUppercase = RegExp(r'[A-Z]').hasMatch(value);
+      _pwHasNumber = RegExp(r'[0-9]').hasMatch(value);
+      _pwHasSpecial =
+          RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(value);
+    });
+  }
+
+  Widget _buildPasswordRequirements() {
+    TextStyle _itemStyle(bool met) => TextStyle(
+          fontSize: 12,
+          color: met ? AppTheme.logoSage : Colors.grey.shade500,
+          fontWeight: met ? FontWeight.w600 : FontWeight.w400,
+        );
+
+    Widget _requirement(bool met, String text) {
+      return Row(
+        children: [
+          Icon(
+            met ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 14,
+            color: met ? AppTheme.logoSage : Colors.grey.shade400,
+          ),
+          const SizedBox(width: 6),
+          Expanded(child: Text(text, style: _itemStyle(met))),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _requirement(_pwHasMinLength, 'At least 8 characters'),
+        const SizedBox(height: 4),
+        _requirement(_pwHasUppercase, 'At least one uppercase letter'),
+        const SizedBox(height: 4),
+        _requirement(_pwHasNumber, 'At least one number'),
+        const SizedBox(height: 4),
+        _requirement(_pwHasSpecial, 'At least one special character'),
+      ],
+    );
   }
 }
