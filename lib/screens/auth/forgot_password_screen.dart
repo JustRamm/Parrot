@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
+import '../../auth/auth_controller.dart';
 
-class ForgotPasswordScreen extends StatefulWidget {
+class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
 
   @override
-  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+  ConsumerState<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   // 0 = enter email, 1 = enter OTP, 2 = success
   int _step = 0;
   bool _isLoading = false;
@@ -39,12 +41,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       return;
     }
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2)); // Simulated network call
+    final controller = ref.read(authControllerProvider.notifier);
+    final result = await controller.sendPasswordResetEmail(
+      _emailController.text.trim(),
+    );
     if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _step = 1;
-    });
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.success
+              ? 'Password reset email sent. Please check your inbox.'
+              : (result.message ?? 'Unable to send reset email.'),
+        ),
+      ),
+    );
+
+    if (result.success) {
+      setState(() => _step = 2);
+    }
   }
 
   Future<void> _verifyOtp() async {

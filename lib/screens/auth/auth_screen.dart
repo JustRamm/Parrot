@@ -1,41 +1,89 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
+import '../../auth/auth_controller.dart';
+import '../../auth/auth_state.dart' as auth_state;
 
-class AuthScreen extends StatefulWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
+class _AuthScreenState extends ConsumerState<AuthScreen> {
   bool isLogin = true;
-  
-  // Create a separate GlobalKey for the form if validation is needed later
+
   final _formKey = GlobalKey<FormState>();
+
+  final _loginEmailController = TextEditingController();
+  final _loginPasswordController = TextEditingController();
+
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _signupEmailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _signupPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _loginEmailController.dispose();
+    _loginPasswordController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _signupEmailController.dispose();
+    _phoneController.dispose();
+    _signupPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<auth_state.AuthState>(
+      authControllerProvider,
+      (previous, next) {
+        final message = next.errorMessage;
+        if (message != null && message.isNotEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+          ref.read(authControllerProvider.notifier).clearError();
+        }
+      },
+    );
+
+    final auth = ref.watch(authControllerProvider);
+
     return Scaffold(
       backgroundColor: AppTheme.surfaceWhite,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 500),
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return FadeTransition(opacity: animation, child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.0, 0.05),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ));
-              },
-              child: isLogin ? _buildSignIn() : _buildSignUp(),
+            child: Form(
+              key: _formKey,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.0, 0.05),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: isLogin
+                    ? _buildSignIn(isLoading: auth.isLoading)
+                    : _buildSignUp(isLoading: auth.isLoading),
+              ),
             ),
           ),
         ),
@@ -43,7 +91,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildSignIn() {
+  Widget _buildSignIn({required bool isLoading}) {
     return Column(
       key: const ValueKey("SignIn"),
       mainAxisAlignment: MainAxisAlignment.center,
@@ -68,9 +116,21 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           style: TextStyle(fontSize: 16, color: Colors.grey.shade600, height: 1.5),
         ),
         const SizedBox(height: 48),
-        _buildTextField("Email Address", LucideIcons.mail),
+        _buildTextField(
+          "Email Address",
+          LucideIcons.mail,
+          controller: _loginEmailController,
+          keyboardType: TextInputType.emailAddress,
+          validator: _validateEmail,
+        ),
         const SizedBox(height: 16),
-        _buildTextField("Password", LucideIcons.lock, obscure: true),
+        _buildTextField(
+          "Password",
+          LucideIcons.lock,
+          controller: _loginPasswordController,
+          obscure: true,
+          validator: _validatePassword,
+        ),
         const SizedBox(height: 16),
         Align(
           alignment: Alignment.centerRight,
@@ -80,14 +140,29 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           ),
         ),
         const SizedBox(height: 32),
-        _buildPrimaryButton("Sign In", () => context.go('/main')),
+        _buildPrimaryButton(
+          "Sign In",
+          isLoading: isLoading,
+          onPressed: () async {
+            if (!_formKey.currentState!.validate()) return;
+            final controller = ref.read(authControllerProvider.notifier);
+            final result = await controller.signIn(
+              email: _loginEmailController.text.trim(),
+              password: _loginPasswordController.text,
+            );
+            if (!mounted) return;
+            if (result.success) {
+              context.go('/main');
+            }
+          },
+        ),
         const SizedBox(height: 32),
         _buildToggleRow("New to Parrot? ", "Create Account"),
       ],
     );
   }
 
-  Widget _buildSignUp() {
+  Widget _buildSignUp({required bool isLoading}) {
     return Column(
       key: const ValueKey("SignUp"),
       mainAxisAlignment: MainAxisAlignment.center,
@@ -116,22 +191,75 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         // Extended Fields
         Row(
           children: [
-            Expanded(child: _buildTextField("First Name", LucideIcons.user)),
+            Expanded(
+              child: _buildTextField(
+                "First Name",
+                LucideIcons.user,
+                controller: _firstNameController,
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _buildTextField("Last Name", LucideIcons.user)),
+            Expanded(
+              child: _buildTextField(
+                "Last Name",
+                LucideIcons.user,
+                controller: _lastNameController,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
-        _buildTextField("Email Address", LucideIcons.mail),
+        _buildTextField(
+          "Email Address",
+          LucideIcons.mail,
+          controller: _signupEmailController,
+          keyboardType: TextInputType.emailAddress,
+          validator: _validateEmail,
+        ),
         const SizedBox(height: 16),
-         _buildTextField("Phone Number", LucideIcons.phone),
+        _buildTextField(
+          "Phone Number",
+          LucideIcons.phone,
+          controller: _phoneController,
+          keyboardType: TextInputType.phone,
+        ),
         const SizedBox(height: 16),
-        _buildTextField("Password", LucideIcons.lock, obscure: true),
+        _buildTextField(
+          "Password",
+          LucideIcons.lock,
+          controller: _signupPasswordController,
+          obscure: true,
+          validator: _validatePassword,
+        ),
         const SizedBox(height: 16),
-         _buildTextField("Confirm Password", LucideIcons.checkCircle, obscure: true),
+        _buildTextField(
+          "Confirm Password",
+          LucideIcons.checkCircle,
+          controller: _confirmPasswordController,
+          obscure: true,
+          validator: _validateConfirmPassword,
+        ),
         
         const SizedBox(height: 32),
-        _buildPrimaryButton("Sign Up", () => context.go('/main')),
+        _buildPrimaryButton(
+          "Sign Up",
+          isLoading: isLoading,
+          onPressed: () async {
+            if (!_formKey.currentState!.validate()) return;
+            final controller = ref.read(authControllerProvider.notifier);
+            final result = await controller.signUp(
+              email: _signupEmailController.text.trim(),
+              password: _signupPasswordController.text,
+              firstName: _firstNameController.text.trim(),
+              lastName: _lastNameController.text.trim(),
+              phone: _phoneController.text.trim(),
+            );
+            if (!mounted) return;
+            if (result.success) {
+              context.go('/main');
+            }
+          },
+        ),
         const SizedBox(height: 32),
         _buildToggleRow("Already have an account? ", "Sign In"),
       ],
@@ -162,7 +290,14 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildTextField(String label, IconData icon, {bool obscure = false}) {
+  Widget _buildTextField(
+    String label,
+    IconData icon, {
+    TextEditingController? controller,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+    bool obscure = false,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -175,8 +310,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           ),
         ],
       ),
-      child: TextField(
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
         obscureText: obscure,
+        validator: validator,
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
@@ -197,9 +335,13 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildPrimaryButton(String text, VoidCallback onPressed) {
+  Widget _buildPrimaryButton(
+    String text, {
+    required bool isLoading,
+    required Future<void> Function() onPressed,
+  }) {
     return ElevatedButton(
-      onPressed: onPressed,
+      onPressed: isLoading ? null : () => onPressed(),
       style: ElevatedButton.styleFrom(
         backgroundColor: AppTheme.primaryDark,
         padding: const EdgeInsets.symmetric(vertical: 18),
@@ -209,10 +351,23 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         elevation: 8,
         shadowColor: AppTheme.logoSage.withOpacity(0.4),
       ),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-      ),
+      child: isLoading
+          ? const SizedBox(
+              height: 22,
+              width: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
+          : Text(
+              text,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
     );
   }
 
@@ -234,5 +389,38 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         ),
       ],
     );
+  }
+
+  String? _validateEmail(String? value) {
+    final email = value?.trim() ?? '';
+    if (email.isEmpty) {
+      return 'Please enter your email address.';
+    }
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+      return 'Please enter a valid email address.';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    final password = value ?? '';
+    if (password.isEmpty) {
+      return 'Please enter your password.';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    return null;
+  }
+
+  String? _validateConfirmPassword(String? value) {
+    final confirm = value ?? '';
+    if (confirm.isEmpty) {
+      return 'Please confirm your password.';
+    }
+    if (confirm != _signupPasswordController.text) {
+      return 'Passwords do not match.';
+    }
+    return null;
   }
 }

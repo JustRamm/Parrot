@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
+import '../../auth/auth_controller.dart';
 
-class ChangePasswordScreen extends StatefulWidget {
+class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
 
   @override
-  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+  ConsumerState<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
-class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -92,9 +94,21 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
 
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
+    final controller = ref.read(authControllerProvider.notifier);
+    final result = await controller.changePassword(
+      newPassword: _newPasswordController.text,
+    );
     if (!mounted) return;
     setState(() => _isLoading = false);
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Unable to update password.'),
+        ),
+      );
+      return;
+    }
 
     showDialog(
       context: context,
@@ -118,8 +132,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         content: const Text('Your password has been updated successfully. Please sign in again.'),
         actions: [
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
+              await controller.signOut();
               context.go('/auth');
             },
             style: ElevatedButton.styleFrom(
