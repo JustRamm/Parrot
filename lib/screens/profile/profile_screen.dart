@@ -1,14 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme.dart';
 import '../settings/emotion_config_screen.dart';
+import '../../auth/auth_controller.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authControllerProvider);
+    final user = authState.user;
+
+    final metadata = user?.userMetadata ?? const <String, dynamic>{};
+    final firstName = (metadata['first_name'] as String?)?.trim();
+    final lastName = (metadata['last_name'] as String?)?.trim();
+    final fullName = [
+      if (firstName != null && firstName.isNotEmpty) firstName,
+      if (lastName != null && lastName.isNotEmpty) lastName,
+    ].join(' ').trim();
+
+    final displayName = fullName.isNotEmpty
+        ? fullName
+        : (user?.email ?? 'Guest');
+
     return Scaffold(
       backgroundColor: AppTheme.surfaceWhite,
       appBar: AppBar(
@@ -60,13 +77,13 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              "John Doe",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryDark),
+            Text(
+              displayName,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryDark),
             ),
-            const Text(
+            Text(
               "Pro Member",
-              style: TextStyle(fontSize: 14, color: AppTheme.logoSage, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 14, color: AppTheme.logoSage.withOpacity(0.9), fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 40),
             
@@ -100,12 +117,12 @@ class ProfileScreen extends StatelessWidget {
               child: SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Camera flipped (Front/Back)")),
-                    );
-                    // Navigate back to auth screen on logout
-                    context.go('/auth');
+                  onPressed: () async {
+                    final controller = ref.read(authControllerProvider.notifier);
+                    await controller.signOut();
+                    if (context.mounted) {
+                      context.go('/auth');
+                    }
                   },
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.logoRose,

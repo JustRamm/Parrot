@@ -23,6 +23,7 @@ import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/change_password_screen.dart';
 import '../screens/settings/account_deletion_screen.dart';
 import '../screens/settings/checkout_screen.dart';
+import '../auth/auth_gate.dart';
 
 // Helper function for custom premium transitions
 Page<dynamic> _buildPageWithAnimation(Widget child, GoRouterState state) {
@@ -61,7 +62,7 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/main',
-      pageBuilder: (context, state) => _buildPageWithAnimation(const MainNavigationWrapper(), state),
+      pageBuilder: (context, state) => _buildPageWithAnimation(const AuthGate(), state),
     ),
     GoRoute(
       path: '/voice-library',
