@@ -58,11 +58,15 @@ backend_dir = os.path.dirname(os.path.abspath(__file__))
 # Initialize Voice Cloning Manager
 vc_manager = VoiceCloningManager(models_dir=os.path.join(backend_dir, "clone", "saved_models"))
 
-# Initialize TTS Manager
-tts_manager = TTSManager(
-    parrot_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "parrot_model.ckpt"), 
-    vocoder_checkpoint_path=os.path.join(backend_dir, "tts", "checkpoints", "vocoder_model.ckpt") 
-)
+# Initialize TTS Manager (Share resources with VC Manager)
+tts_manager = TTSManager()
+# Hook tts_manager to use vc_manager's models to save RAM
+if vc_manager.synthesizer_loaded:
+    tts_manager.synthesizer = vc_manager.synthesizer
+    tts_manager.vocoder_loaded = vc_manager.vocoder_loaded
+    # Regenerate embeddings with the real model
+    tts_manager._generate_default_embeddings()
+
 
 # Voice profile storage
 active_voice_profile = {
@@ -943,17 +947,23 @@ def clone_and_activate_voice():
         # Cleanup
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        
+            
         if result.get('success'):
             # Set as active voice
             with voice_profiles_lock:
                 active_voice_profile['embedding'] = result['embedding']
                 active_voice_profile['type'] = 'Cloned'
             
+            # Auto-save if name provided (optional)
+            name = request.form.get('name') or f"Cloned_{os.urandom(2).hex()}"
+            vc_manager.save_embedding(name, result['embedding'])
+            
             return jsonify({
                 'success': True,
                 'message': 'Voice cloned and activated successfully',
+                'name': name,
                 'is_mock': result.get('is_mock', False),
+                'embedding': result['embedding'],
                 'active_profile': {
                     'type': 'Cloned',
                     'has_cloned_voice': True,
@@ -962,9 +972,31 @@ def clone_and_activate_voice():
             })
         else:
             return jsonify(result), 500
+
+
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/save_voice', methods=['POST'])
+def save_voice():
+    """Save a voice embedding with a name"""
+    data = request.json
+    name = data.get('name')
+    embedding = data.get('embedding')
+    
+    if not name or not embedding:
+        return jsonify({"error": "Missing name or embedding"}), 400
+        
+    success, message = vc_manager.save_embedding(name, embedding)
+    return jsonify({"success": success, "message": message})
+
+@app.route('/list_voices', methods=['GET'])
+def list_voices():
+    """List all saved voice clones"""
+    voices = vc_manager.list_saved_embeddings()
+    return jsonify({"success": True, "voices": voices})
+
 
 @app.route('/get_voice_status', methods=['GET'])
 def get_voice_status():

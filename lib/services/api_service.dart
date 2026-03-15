@@ -184,8 +184,54 @@ class ApiService {
     }
   }
 
+  // List saved voices from the backend
+  Future<List<Map<String, dynamic>>> listVoices() async {
+    final uri = Uri.parse('$baseUrl/list_voices');
+    
+    try {
+      final response = await _client.get(uri).timeout(AppConstants.networkTimeout);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['voices']);
+        }
+        return [];
+      } else {
+        throw ServerException('Failed to list voices');
+      }
+    } catch (e) {
+      throw NetworkException(ErrorMessages.networkError);
+    }
+  }
+
+  // Save a voice embedding with a name
+  Future<Map<String, dynamic>> saveVoice(String name, List<dynamic> embedding) async {
+    final uri = Uri.parse('$baseUrl/save_voice');
+    
+    try {
+      final response = await _client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'name': name,
+          'embedding': embedding,
+        }),
+      ).timeout(AppConstants.networkTimeout);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw ServerException('Failed to save voice profile');
+      }
+    } catch (e) {
+      throw NetworkException(ErrorMessages.networkError);
+    }
+  }
+
   // Parse error message from response body
   String? _parseErrorBody(String body) {
+
     try {
       final errorData = json.decode(body);
       return errorData['error']?.toString();

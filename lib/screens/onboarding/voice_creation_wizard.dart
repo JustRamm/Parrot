@@ -25,8 +25,10 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
   String? _selectedFileName;
   int? _selectedFileSize;
   bool _isProcessing = false;
+  final TextEditingController _nameController = TextEditingController();
   
   // Recording states
+
   final _audioRecorder = AudioRecorder();
   bool _isRecording = false;
   String? _recordedPath;
@@ -36,6 +38,7 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
   @override
   void dispose() {
     _audioRecorder.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -144,18 +147,16 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
       AppState.voiceCreationProgress.value = 0.7;
 
       if (result['success'] == true && result['embedding'] != null) {
+        final voiceName = _nameController.text.isNotEmpty ? _nameController.text : "My Cloned Voice";
+        
         AppState.voiceEmbedding.value = result['embedding'];
-        AppState.currentVoiceId.value = "custom_${DateTime.now().millisecondsSinceEpoch}";
+        AppState.currentVoiceId.value = "saved_$voiceName";
         AppState.currentVoiceProfile.value = "Cloned"; // Set active profile
         AppState.isVoiceGenerated.value = true;
-        AppState.voiceCreationProgress.value = 1.0;
         
-        // Activate on backend so auto-speak uses it
-        await _apiService.setVoiceProfile(
-          voiceType: 'Cloned',
-          embedding: result['embedding'],
-          autoSpeak: true,
-        );
+        // Save to backend with name
+        await _apiService.saveVoice(voiceName, result['embedding']);
+
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -374,7 +375,21 @@ class _VoiceCreationWizardState extends State<VoiceCreationWizard> {
             ],
           ),
         ),
+        const SizedBox(height: 32),
+        const Text("Name your voice identity", style: TextStyle(fontWeight: FontWeight.w800, color: AppTheme.primaryDark)),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _nameController,
+          decoration: InputDecoration(
+            hintText: "e.g. My Natural Self",
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            prefixIcon: const Icon(LucideIcons.tag, size: 20),
+          ),
+        ),
         const SizedBox(height: 60),
+
         Center(child: Icon(LucideIcons.activity, size: 100, color: AppTheme.logoSage.withOpacity(0.2))),
       ],
     );

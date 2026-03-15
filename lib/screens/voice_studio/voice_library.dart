@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -20,12 +21,48 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
   
   String _activeVoiceId = AppState.currentVoiceId.value ?? "1";
   bool _isPlayingDemo = false;
+  bool _isLoading = true;
   
-  final List<Map<String, String>> _voices = [
+  List<Map<String, String>> _voices = [
     {"id": "1", "name": "Natural Me", "date": "2 days ago", "type": "Natural", "demoText": "Hello! This is my natural voice identity, cloned for real-time communication."},
     {"id": "2", "name": "Formal Public", "date": "1 week ago", "type": "Professional", "demoText": "Good afternoon. I am using my formal voice profile, optimized for professional environments."},
     {"id": "3", "name": "Casual Tone", "date": "3 weeks ago", "type": "Warm", "demoText": "Hey there! I'm using my casual tone. It's great for chatting with friends and family."},
   ];
+
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSavedVoices();
+  }
+
+  Future<void> _fetchSavedVoices() async {
+    try {
+      final savedVoices = await _apiService.listVoices();
+      if (mounted) {
+        setState(() {
+          for (var voice in savedVoices) {
+            final id = "saved_${voice['name']}";
+            // Check if already in list
+            if (!_voices.any((v) => v['id'] == id)) {
+              _voices.add({
+                "id": id,
+                "name": voice['name'],
+                "date": "Saved",
+                "type": "Cloned",
+                "demoText": "Hello! Check out my newly cloned voice identity.",
+                "embedding": jsonEncode(voice['embedding']),
+              });
+            }
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching voices: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -41,9 +78,13 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
     try {
       final text = voice['demoText']!;
       final profile = voice['type']!;
+      final embeddingStr = voice['embedding'];
+      List<dynamic>? embedding;
+      if (embeddingStr != null) {
+        embedding = jsonDecode(embeddingStr);
+      }
       
-      // Use null embedding for demo to force profile usage on backend
-      final audioBytes = await _apiService.synthesizeSpeech(text, null, voiceProfile: profile);
+      final audioBytes = await _apiService.synthesizeSpeech(text, embedding, voiceProfile: profile);
       await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
       
       _audioPlayer.onPlayerComplete.first.then((_) {
@@ -64,10 +105,18 @@ class _VoiceLibraryScreenState extends State<VoiceLibraryScreen> {
     AppState.currentVoiceId.value = voice['id'];
     AppState.currentVoiceProfile.value = voice['type']!;
     
+    List<dynamic>? embedding;
+    if (voice['embedding'] != null) {
+      embedding = jsonDecode(voice['embedding']!);
+      AppState.voiceEmbedding.value = embedding;
+    } else {
+      AppState.voiceEmbedding.value = null;
+    }
+    
     // Notify backend about active voice profile
     _apiService.setVoiceProfile(
       voiceType: voice['type']!,
-      embedding: voice['type'] == 'Cloned' ? AppState.voiceEmbedding.value : null,
+      embedding: embedding,
       autoSpeak: true,
     ).catchError((e) => debugPrint("Error syncing voice profile: $e"));
   }

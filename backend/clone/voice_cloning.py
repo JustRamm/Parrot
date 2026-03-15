@@ -23,6 +23,10 @@ class VoiceCloningManager:
         self.synthesizer = None
         self.lock = threading.Lock()
         
+        # New: Cloned voices persistence
+        self.embeddings_dir = self.models_dir.parent / "saved_embeddings"
+        self.embeddings_dir.mkdir(parents=True, exist_ok=True)
+        
         print(f"Initializing Voice Cloning Manager...")
         print(f"Models directory: {self.models_dir.absolute()}")
         
@@ -181,4 +185,31 @@ class VoiceCloningManager:
             import traceback
             traceback.print_exc()
             return None, str(e)
+
+    def save_embedding(self, name, embedding_list):
+        """Save a clone embedding to disk"""
+        try:
+            import json
+            safe_name = "".join([c for c in name if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
+            path = self.embeddings_dir / f"{safe_name}.json"
+            with open(path, 'w') as f:
+                json.dump({
+                    "name": name,
+                    "embedding": embedding_list
+                }, f)
+            return True, f"Saved to {path}"
+        except Exception as e:
+            return False, str(e)
+
+    def list_saved_embeddings(self):
+        """List all saved clone embeddings"""
+        results = []
+        try:
+            import json
+            for path in self.embeddings_dir.glob("*.json"):
+                with open(path, 'r') as f:
+                    results.append(json.load(f))
+        except Exception as e:
+            print(f"Error listing embeddings: {e}")
+        return results
 
