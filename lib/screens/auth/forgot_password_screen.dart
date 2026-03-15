@@ -59,7 +59,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     );
 
     if (result.success) {
-      setState(() => _step = 2);
+      context.pushReplacement('/change-password', extra: {'isResetFlow': true});
     }
   }
 

@@ -6,7 +6,9 @@ import '../../core/theme.dart';
 import '../../auth/auth_controller.dart';
 
 class ChangePasswordScreen extends ConsumerStatefulWidget {
-  const ChangePasswordScreen({super.key});
+  final bool isResetFlow;
+
+  const ChangePasswordScreen({super.key, this.isResetFlow = false});
 
   @override
   ConsumerState<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
@@ -72,7 +74,19 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   }
 
   Future<void> _save() async {
-    if (_currentPasswordController.text.isEmpty ||
+    final authState = ref.read(authControllerProvider);
+    final hasVerified = authState.isPasswordRecovery || authState.user != null;
+
+    if (widget.isResetFlow && !hasVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Identity not verified. Please click the reset link sent to your email first.')),
+      );
+      return;
+    }
+
+    final isRecovery = widget.isResetFlow || hasVerified;
+
+    if ((!isRecovery && _currentPasswordController.text.isEmpty) ||
         _newPasswordController.text.isEmpty ||
         _confirmPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -134,6 +148,11 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
+              final authState = ref.read(authControllerProvider);
+              final hasVerified = authState.isPasswordRecovery || authState.user != null;
+              if (hasVerified) {
+                controller.clearPasswordRecovery();
+              }
               await controller.signOut();
               context.go('/auth');
             },
@@ -205,17 +224,18 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             ),
             const SizedBox(height: 32),
 
-            const Text('CURRENT PASSWORD',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
-            const SizedBox(height: 12),
-            _buildPasswordField(
-              controller: _currentPasswordController,
-              label: 'Current Password',
-              show: _showCurrent,
-              onToggle: () => setState(() => _showCurrent = !_showCurrent),
-            ),
-
-            const SizedBox(height: 28),
+            if (!widget.isResetFlow) ...[
+              const Text('CURRENT PASSWORD',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
+              const SizedBox(height: 12),
+              _buildPasswordField(
+                controller: _currentPasswordController,
+                label: 'Current Password',
+                show: _showCurrent,
+                onToggle: () => setState(() => _showCurrent = !_showCurrent),
+              ),
+              const SizedBox(height: 28),
+            ],
             const Text('NEW PASSWORD',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
             const SizedBox(height: 12),

@@ -81,7 +81,10 @@ class SupabaseAuthService {
 
   Future<AuthResult> sendPasswordResetEmail(String email) async {
     try {
-      await _client.auth.resetPasswordForEmail(email);
+      await _client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'io.supabase.parrot://app/login-callback',
+      );
       return const AuthResult(success: true);
     } on supa.AuthException catch (e) {
       return AuthResult.failure(_mapAuthException(e));

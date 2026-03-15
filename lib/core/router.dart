@@ -136,7 +136,19 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/change-password',
-      pageBuilder: (context, state) => _buildPageWithAnimation(const ChangePasswordScreen(), state),
+      pageBuilder: (context, state) {
+        final data = state.extra as Map<String, dynamic>?;
+        final isResetFlow = data?['isResetFlow'] as bool? ?? false;
+        return _buildPageWithAnimation(ChangePasswordScreen(isResetFlow: isResetFlow), state);
+      },
+    ),
+    // Deep link route for Supabase auth callback
+    GoRoute(
+      path: '/login-callback',
+      pageBuilder: (context, state) => _buildPageWithAnimation(
+        const ChangePasswordScreen(isResetFlow: true),
+        state,
+      ),
     ),
     GoRoute(
       path: '/account-deletion',

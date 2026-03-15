@@ -70,7 +70,6 @@ class AuthController extends Notifier<AuthState> {
     );
     state = state.copyWith(
       isLoading: false,
-      user: result.success ? result.user : state.user,
       errorMessage: result.success ? null : result.message,
       clearError: result.success,
     );
@@ -120,11 +119,18 @@ class AuthController extends Notifier<AuthState> {
   void _subscribeToAuthChanges() {
     _authSub = _service.authStateChanges().listen((authState) {
       final user = authState.session?.user;
+      final isRecovery = authState.event == supa.AuthChangeEvent.passwordRecovery;
+      
       state = state.copyWith(
         user: user,
         clearError: true,
+        isPasswordRecovery: isRecovery || state.isPasswordRecovery, // keep it true if it was true
       );
     });
+  }
+
+  void clearPasswordRecovery() {
+    state = state.copyWith(clearRecovery: true);
   }
 }
 
